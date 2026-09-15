@@ -221,6 +221,15 @@
         <input type="password" id="cp-new">
         <button class="btn" onclick="doChangePassword()">Update password</button>
       </div>
+      <div class="card">
+        <h2>Account details <span class="tag">POST /api/auth/update-account</span></h2>
+        <div class="msg" id="account-details-msg"></div>
+        <label>Display name</label>
+        <input type="text" id="account-username" autocomplete="username">
+        <label>Email</label>
+        <input type="email" id="account-email" autocomplete="email">
+        <button class="btn" onclick="doUpdateAccount()">Update details</button>
+      </div>
     </section>
 
     <!-- DASHBOARD -->
@@ -250,7 +259,7 @@
 
       <div class="card">
         <h2>Lockouts <span class="tag">GET /api/admin/lockouts</span></h2>
-        <table id="lockouts-table"><thead><tr><th>User ID</th><th>#</th><th>Locked at</th><th>Unlocks at</th><th>Duration</th><th>Status</th></tr></thead><tbody></tbody></table>
+        <table id="lockouts-table"><thead><tr><th>User ID</th><th>#</th><th>Locked at</th><th>Unlocks at</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
 
@@ -380,6 +389,10 @@ async function loadMe(){
   const { ok, data } = await api('/api/auth/me', { auth:'access' });
   if (!ok) { showMsg('account-msg', data.error || 'Could not load session.', 'error'); return; }
   document.getElementById('me-json').textContent = JSON.stringify(data.user, null, 2);
+  document.getElementById('account-username').value = data.user.username;
+  document.getElementById('account-email').value = data.user.email;
+  state.user = data.user;
+  updateSessionBox();
 }
 
 async function doChangePassword(){
@@ -390,6 +403,21 @@ async function doChangePassword(){
   const { ok, data } = await api('/api/auth/change-password', { method:'POST', auth:'access', body: JSON.stringify({current_password, new_password}) });
   if (!ok) { showMsg('cp-msg', (data.error || 'Could not change password.') + (data.details ? '\n- ' + data.details.join('\n- ') : ''), 'error'); return; }
   showMsg('cp-msg', 'Password updated.', 'ok');
+}
+
+async function doUpdateAccount(){
+  hideMsg('account-details-msg');
+  if (!state.accessToken) { showMsg('account-details-msg', 'Log in first.', 'error'); return; }
+  const username = document.getElementById('account-username').value.trim();
+  const email = document.getElementById('account-email').value.trim();
+  const { ok, data } = await api('/api/auth/update-account', {
+    method:'POST', auth:'access', body: JSON.stringify({username, email})
+  });
+  if (!ok) { showMsg('account-details-msg', data.error || 'Could not update account details.', 'error'); return; }
+  state.user = data.user;
+  updateSessionBox();
+  document.getElementById('me-json').textContent = JSON.stringify(data.user, null, 2);
+  showMsg('account-details-msg', 'Account details updated.', 'ok');
 }
 
 async function loadDashboard(){
@@ -419,12 +447,21 @@ async function loadDashboard(){
   ).join('');
 
   const lo = await api('/api/admin/lockouts', { auth:'access' });
-  const lockBody = document.querySelector('#lockouts-table tbody');
-  lockBody.innerHTML = (lo.data.lockouts || []).map(l =>
-    '<tr><td>' + l.user_id + '</td><td>' + l.lockout_number + '</td><td>' + fmtTime(l.locked_at) +
-    '</td><td>' + fmtTime(l.unlock_at) + '</td><td>' + l.duration_seconds + 's</td><td>' +
-    (l.active ? '<span class="pill fail">active</span>' : '<span class="pill ok">expired</span>') + '</td></tr>'
-  ).join('');
+const lockBody = document.querySelector('#lockouts-table tbody');
+lockBody.innerHTML = (lo.data.lockouts || []).map(l =>
+  '<tr><td>' + l.user_id + '</td><td>' + l.lockout_number + '</td><td>' + fmtTime(l.locked_at) +
+  '</td><td>' + fmtTime(l.unlock_at) + '</td><td>' + l.duration_seconds + 's</td><td>' +
+  (l.active ? '<span class="pill fail">active</span>' : '<span class="pill ok">expired</span>') + '</td><td>' +
+  (l.active ? '<button class="btn secondary btn-xs" onclick="doUnlock(' + l.user_id + ')">Unlock</button>' : '—') +
+  '</td></tr>'
+).join('');
+}
+
+async function doUnlock(userId){
+  const { ok, data } = await api('/api/admin/unlock/' + userId, { method:'POST', auth:'access' });
+  if (!ok) { showMsg('dash-msg', data.error || 'Could not unlock user.', 'error'); return; }
+  showMsg('dash-msg', data.message || 'User unlocked.', 'ok');
+  loadDashboard();
 }
 
 function fmtTime(iso){

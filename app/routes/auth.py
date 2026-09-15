@@ -9,6 +9,7 @@ Authentication REST endpoints.
   POST /api/auth/refresh         - exchange refresh token for new access token
   POST /api/auth/logout          - client-side token discard endpoint (stateless JWT)
   POST /api/auth/change-password - authenticated password change
+    POST /api/auth/update-account  - authenticated account details update
   GET  /api/auth/me              - current session info
 """
 
@@ -239,6 +240,49 @@ def change_password():
 
     log_event("password_changed", ip_address=_client_ip(), user_id=user.id)
     return jsonify({"message": "Password changed successfully."}), 200
+
+
+@auth_bp.route("/update-account", methods=["POST"])
+@token_required(purpose="access")
+def update_account():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    user = g.current_user
+
+    if not username or not email:
+        return jsonify({"error": "username and email are required."}), 400
+
+    duplicate_email = User.query.filter(
+        User.email == email, User.id != user.id
+    ).first()
+    if duplicate_email:
+        return jsonify({"error": "Email is already registered."}), 409
+
+    duplicate_username = User.query.filter(
+        User.username == username, User.id != user.id
+    ).first()
+    if duplicate_username:
+        return jsonify({"error": "Username is already registered."}), 409
+
+    old_username = user.username
+    old_email = user.email
+    user.username = username
+    user.email = email
+    db.session.commit()
+
+    changes = []
+    if old_username != username:
+        changes.append("username changed")
+    if old_email != email:
+        changes.append("email changed")
+    log_event(
+        "account_updated",
+        ip_address=_client_ip(),
+        user_id=user.id,
+        details=", ".join(changes) or "account details unchanged",
+    )
+    return jsonify({"message": "Account details updated.", "user": user.to_public_dict()}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])

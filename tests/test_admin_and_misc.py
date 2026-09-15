@@ -54,6 +54,42 @@ def test_password_reuse_is_blocked(client):
     assert r2.status_code == 400
 
 
+def test_account_details_update_requires_auth_and_logs_change(client, app):
+    register(client)
+    response = client.post("/api/auth/update-account", json={
+        "username": "updated-alice", "email": "updated@example.com",
+    })
+    assert response.status_code == 401
+
+    token = login(client).get_json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post("/api/auth/update-account", headers=headers, json={
+        "username": "updated-alice", "email": "UPDATED@example.com",
+    })
+    assert response.status_code == 200
+    assert response.get_json()["user"]["email"] == "updated@example.com"
+
+    with app.app_context():
+        from app.models import AuditLog, User
+        user = User.query.filter_by(username="updated-alice").first()
+        assert user.email == "updated@example.com"
+        assert AuditLog.query.filter_by(
+            user_id=user.id, event_type="account_updated"
+        ).count() == 1
+
+
+def test_account_details_update_rejects_duplicate_email(client):
+    register(client)
+    register(client, username="bob", email="bob@example.com")
+    token = login(client).get_json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post("/api/auth/update-account", headers=headers, json={
+        "username": "alice-new", "email": "bob@example.com",
+    })
+    assert response.status_code == 409
+
+
 def test_health_endpoint(client):
     resp = client.get("/health")
     assert resp.status_code == 200
