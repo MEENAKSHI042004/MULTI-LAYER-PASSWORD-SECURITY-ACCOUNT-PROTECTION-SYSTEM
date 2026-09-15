@@ -1,0 +1,30 @@
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-please-change-me}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-please-change-me-too}
+      - SEED_ADMIN_USERNAME=${SEED_ADMIN_USERNAME:-admin}
+      - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-admin@example.com}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-ChangeMe!2026}
+      # Uncomment to use Postgres instead of the default SQLite file:
+      # - DATABASE_URL=postgresql://mlpsaps:mlpsaps@db:5432/mlpsaps
+    volumes:
+      - instance_data:/app/instance
+    restart: unless-stopped
+
+  # Optional Postgres service for a production-shaped deployment.
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     - POSTGRES_USER=mlpsaps
+  #     - POSTGRES_PASSWORD=mlpsaps
+  #     - POSTGRES_DB=mlpsaps
+  #   volumes:
+  #     - pg_data:/var/lib/postgresql/data
+
+volumes:
+  instance_data:
+  # pg_data:
