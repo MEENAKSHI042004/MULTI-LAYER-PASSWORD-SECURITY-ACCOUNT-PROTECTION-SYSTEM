@@ -245,12 +245,12 @@
 
       <div class="card">
         <h2>Login attempts <span class="tag">GET /api/admin/login-attempts</span></h2>
-        <table id="attempts-table"><thead><tr><th>Time</th><th>Username</th><th>Stage</th><th>Result</th><th>Reason</th><th>IP</th></tr></thead><tbody></tbody></table>
+        <table id="attempts-table"><thead><tr><th>Time</th><th>Username</th><th>Stage</th><th>Result</th><th>Reason</th><th>IP</th></tr><th>Status</th></tr></thead><tbody></tbody></table>
       </div>
 
       <div class="card">
         <h2>Lockouts <span class="tag">GET /api/admin/lockouts</span></h2>
-        <table id="lockouts-table"><thead><tr><th>User ID</th><th>#</th><th>Locked at</th><th>Unlocks at</th><th>Duration</th><th>Status</th></tr></thead><tbody></tbody></table>
+        <table id="lockouts-table"><thead><tr><th>User ID</th><th>#</th><th>Locked at</th><th>Unlocks at</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
 
@@ -418,13 +418,23 @@ async function loadDashboard(){
     '</td><td>' + x.ip_address + '</td></tr>'
   ).join('');
 
-  const lo = await api('/api/admin/lockouts', { auth:'access' });
+    const lo = await api('/api/admin/lockouts', { auth:'access' });
   const lockBody = document.querySelector('#lockouts-table tbody');
   lockBody.innerHTML = (lo.data.lockouts || []).map(l =>
-    '<tr><td>' + l.user_id + '</td><td>' + l.lockout_number + '</td><td>' + fmtTime(l.locked_at) +
-    '</td><td>' + fmtTime(l.unlock_at) + '</td><td>' + l.duration_seconds + 's</td><td>' +
-    (l.active ? '<span class="pill fail">active</span>' : '<span class="pill ok">expired</span>') + '</td></tr>'
+    '<tr><td>' + l.user_id + '</td><td>' + l.lockout_number + '</td><td>' + fmtTime(l.locked_at) + '</td>' +
+    '<td>' + fmtTime(l.unlock_at) + '</td><td>' + l.duration_seconds + 's</td><td>' +
+    (l.active ? '<span class="pill fail">active</span>' : '<span class="pill ok">expired</span>') +
+    '</td><td>' +
+    (l.active ? '<button onclick="unlockUser(' + l.user_id + ')">Unlock</button>' : '') +
+    '</td></tr>'
   ).join('');
+}
+
+async function unlockUser(userId){
+  const { ok, data } = await api('/api/admin/unlock/' + userId, { method:'POST', auth:'access' });
+  if (!ok) { showMsg('dash-msg', data.error || 'Could not unlock user.', 'error'); return; }
+  showMsg('dash-msg', data.message, 'ok');
+  loadDashboard();
 }
 
 function fmtTime(iso){
