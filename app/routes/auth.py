@@ -7,17 +7,20 @@ Authentication REST endpoints.
   POST /api/auth/mfa/setup       - begin MFA enrolment (returns QR provisioning URI)
   POST /api/auth/mfa/confirm     - confirm enrolment with a valid TOTP code
   POST /api/auth/refresh         - exchange refresh token for new access token
-  POST /api/auth/logout          - client-side token discard endpoint (stateless JWT)
+  POST /api/auth/logout          - revokes the current access token (jti) and its session
   POST /api/auth/change-password - authenticated password change
+    POST /api/auth/update-account  - authenticated account details update
   GET  /api/auth/me              - current session info
+  GET  /api/auth/sessions        - list this user's active sessions
+  POST /api/auth/sessions/<id>/revoke - end a specific session
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, request, jsonify, g, current_app
 
 from app.extensions import db, limiter
-from app.models import User, PasswordHistory
+from app.models import User, PasswordHistory, RevokedToken, Session
 from app.security.hashing import hash_password, verify_password
 from app.security.password_validator import validate_password_strength, is_password_expired
 from app.security.brute_force import (
@@ -33,7 +36,12 @@ from app.security.totp_utils import (
     generate_recovery_codes,
     consume_recovery_code,
 )
-from app.security.jwt_utils import create_pre_mfa_token, create_access_token, create_refresh_token
+from app.security.jwt_utils import (
+    create_pre_mfa_token,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
 from app.security.audit_logger import log_event
 from app.security.decorators import token_required
 
@@ -42,6 +50,23 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 def _client_ip():
     return request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+
+
+def _create_session(user_id, jti, ip, refresh_jti=None):
+    db.session.add(Session(
+        user_id=user_id, jti=jti, ip_address=ip,
+        user_agent=request.headers.get("User-Agent"),
+        refresh_jti=refresh_jti,
+    ))
+    db.session.commit()
+
+
+def _revoke_refresh_jti(refresh_jti):
+    """Add a refresh token's jti to the revocation list, if not already there."""
+    if refresh_jti and not RevokedToken.query.filter_by(jti=refresh_jti).first():
+        refresh_days = current_app.config["JWT_REFRESH_TOKEN_DAYS"]
+        refresh_expiry = datetime.now(timezone.utc) + timedelta(days=refresh_days)
+        db.session.add(RevokedToken(jti=refresh_jti, expires_at=refresh_expiry))
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -124,8 +149,9 @@ def login():
         pre_token = create_pre_mfa_token(user.id)
         return jsonify({"mfa_required": True, "pre_mfa_token": pre_token}), 200
 
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+    access, access_jti = create_access_token(user.id)
+    refresh, refresh_jti = create_refresh_token(user.id)
+    _create_session(user.id, access_jti, ip, refresh_jti=refresh_jti)
     log_event("login_success", ip_address=ip, user_id=user.id)
     return jsonify({"access_token": access, "refresh_token": refresh, "user": user.to_public_dict()}), 200
 
@@ -150,8 +176,9 @@ def verify_mfa():
         return jsonify({"error": "Invalid MFA code."}), 401
 
     record_attempt(user, user.username, ip, success=True, stage="mfa")
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+    access, access_jti = create_access_token(user.id)
+    refresh, refresh_jti = create_refresh_token(user.id)
+    _create_session(user.id, access_jti, ip, refresh_jti=refresh_jti)
     log_event("login_success", ip_address=ip, user_id=user.id, details="via MFA")
     return jsonify({"access_token": access, "refresh_token": refresh, "user": user.to_public_dict()}), 200
 
@@ -192,18 +219,69 @@ def mfa_confirm():
 @token_required(purpose="refresh")
 def refresh():
     user = g.current_user
-    access = create_access_token(user.id)
+    access, access_jti = create_access_token(user.id)
+    _create_session(user.id, access_jti, _client_ip(), refresh_jti=g.current_jti)
     return jsonify({"access_token": access}), 200
 
 
 @auth_bp.route("/logout", methods=["POST"])
 @token_required(purpose="access")
 def logout():
-    # JWTs are stateless; logout is enforced client-side by discarding tokens.
-    # A production system could additionally maintain a short-lived denylist
-    # of revoked token ids (jti) for the remaining access-token lifetime.
+    jti = g.current_jti
+    if jti:
+        token = request.headers.get("Authorization", "").split(" ", 1)[1].strip()
+        payload = decode_token(token)
+        expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+
+        db.session.add(RevokedToken(jti=jti, expires_at=expires_at))
+        session = Session.query.filter_by(jti=jti).first()
+        if session:
+            session.revoked_at = datetime.now(timezone.utc)
+            _revoke_refresh_jti(session.refresh_jti)
+        db.session.commit()
+
     log_event("logout", ip_address=_client_ip(), user_id=g.current_user.id)
     return jsonify({"message": "Logged out."}), 200
+
+
+@auth_bp.route("/sessions", methods=["GET"])
+@token_required(purpose="access")
+def list_sessions():
+    user = g.current_user
+    sessions = Session.query.filter_by(user_id=user.id, revoked_at=None).all()
+    return jsonify({
+        "sessions": [
+            {**s.to_dict(), "is_current": s.jti == g.current_jti}
+            for s in sessions
+        ]
+    }), 200
+
+
+@auth_bp.route("/sessions/<int:session_id>/revoke", methods=["POST"])
+@token_required(purpose="access")
+def revoke_session(session_id):
+    user = g.current_user
+    session = Session.query.filter_by(id=session_id, user_id=user.id).first()
+    if not session:
+        return jsonify({"error": "Session not found."}), 404
+    if session.revoked_at:
+        return jsonify({"message": "Session already revoked."}), 200
+
+    session.revoked_at = datetime.now(timezone.utc)
+
+    # We don't have the raw token for a different session -- only its jti --
+    # so we can't read its real expiry. Revoking for one full access-token
+    # lifetime from now safely covers it either way.
+    minutes = current_app.config["JWT_ACCESS_TOKEN_MINUTES"]
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    db.session.add(RevokedToken(jti=session.jti, expires_at=expires_at))
+
+    _revoke_refresh_jti(session.refresh_jti)
+
+    db.session.commit()
+
+    log_event("session_revoked", ip_address=_client_ip(), user_id=user.id, details=f"session_id={session_id}")
+    return jsonify({"message": "Session revoked."}), 200
 
 
 @auth_bp.route("/change-password", methods=["POST"])
@@ -239,6 +317,49 @@ def change_password():
 
     log_event("password_changed", ip_address=_client_ip(), user_id=user.id)
     return jsonify({"message": "Password changed successfully."}), 200
+
+
+@auth_bp.route("/update-account", methods=["POST"])
+@token_required(purpose="access")
+def update_account():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    user = g.current_user
+
+    if not username or not email:
+        return jsonify({"error": "username and email are required."}), 400
+
+    duplicate_email = User.query.filter(
+        User.email == email, User.id != user.id
+    ).first()
+    if duplicate_email:
+        return jsonify({"error": "Email is already registered."}), 409
+
+    duplicate_username = User.query.filter(
+        User.username == username, User.id != user.id
+    ).first()
+    if duplicate_username:
+        return jsonify({"error": "Username is already registered."}), 409
+
+    old_username = user.username
+    old_email = user.email
+    user.username = username
+    user.email = email
+    db.session.commit()
+
+    changes = []
+    if old_username != username:
+        changes.append("username changed")
+    if old_email != email:
+        changes.append("email changed")
+    log_event(
+        "account_updated",
+        ip_address=_client_ip(),
+        user_id=user.id,
+        details=", ".join(changes) or "account details unchanged",
+    )
+    return jsonify({"message": "Account details updated.", "user": user.to_public_dict()}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])

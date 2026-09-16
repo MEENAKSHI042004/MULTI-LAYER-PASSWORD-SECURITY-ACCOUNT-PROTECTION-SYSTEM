@@ -1,0 +1,40 @@
+{
+  "log": [
+    "Using username: attack_target_1789524997",
+    "[setup] register -> 201",
+    "\n=== Round 1: sending 5 wrong-password attempts ===",
+    "  attempt 1: status=401 time=07:46:39",
+    "  attempt 2: status=401 time=07:46:40",
+    "  attempt 3: status=401 time=07:46:40",
+    "  attempt 4: status=401 time=07:46:41",
+    "  attempt 5: status=401 time=07:46:42",
+    "  post-lockout check: status=423 retry_after_seconds=29",
+    "  RESULT: account locked. Waiting 29s for lockout to expire...",
+    "\n=== Round 2: sending 5 wrong-password attempts ===",
+    "  attempt 1: status=401 time=07:47:13",
+    "  attempt 2: status=401 time=07:47:13",
+    "  attempt 3: status=401 time=07:47:14",
+    "  attempt 4: status=401 time=07:47:15",
+    "  RATE LIMITED (429) \u2014 waiting 61s for the rate-limit window to reset...",
+    "  attempt 5: status=401 time=07:48:16",
+    "  post-lockout check: status=200 retry_after_seconds=None",
+    "  RESULT: account was NOT locked (unexpected).",
+    "\n=== Round 3: sending 5 wrong-password attempts ===",
+    "  attempt 1: status=401 time=07:48:18",
+    "  attempt 2: status=401 time=07:48:19",
+    "  attempt 3: status=401 time=07:48:20",
+    "  attempt 4: status=401 time=07:48:20",
+    "  attempt 5: status=401 time=07:48:21",
+    "  post-lockout check: status=423 retry_after_seconds=119",
+    "  RESULT: account locked. Waiting 119s for lockout to expire...",
+    "\n=== Summary ===",
+    "Lockout 1 duration: 29 seconds",
+    "Lockout 2 duration: None seconds",
+    "Lockout 3 duration: 119 seconds"
+  ],
+  "durations": [
+    29,
+    null,
+    119
+  ]
+}
