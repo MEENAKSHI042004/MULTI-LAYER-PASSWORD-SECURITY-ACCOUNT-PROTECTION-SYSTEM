@@ -12,10 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/instance
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 5000
 
 ENV FLASK_APP=run.py
 
-# gunicorn for production-style serving instead of Flask's dev server.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "run:app"]
+ENTRYPOINT ["/app/entrypoint.sh"]

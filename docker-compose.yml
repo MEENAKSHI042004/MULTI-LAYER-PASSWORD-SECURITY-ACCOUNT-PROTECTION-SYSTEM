@@ -9,22 +9,28 @@ services:
       - SEED_ADMIN_USERNAME=${SEED_ADMIN_USERNAME:-admin}
       - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-admin@example.com}
       - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-ChangeMe!2026}
-      # Uncomment to use Postgres instead of the default SQLite file:
-      # - DATABASE_URL=postgresql://mlpsaps:mlpsaps@db:5432/mlpsaps
+      - DATABASE_URL=postgresql://mlpsaps:mlpsaps@db:5432/mlpsaps
     volumes:
       - instance_data:/app/instance
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Optional Postgres service for a production-shaped deployment.
-  # db:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     - POSTGRES_USER=mlpsaps
-  #     - POSTGRES_PASSWORD=mlpsaps
-  #     - POSTGRES_DB=mlpsaps
-  #   volumes:
-  #     - pg_data:/var/lib/postgresql/data
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=mlpsaps
+      - POSTGRES_PASSWORD=mlpsaps
+      - POSTGRES_DB=mlpsaps
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlpsaps -d mlpsaps"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   instance_data:
-  # pg_data:
+  pg_data:

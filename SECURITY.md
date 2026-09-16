@@ -90,13 +90,15 @@ Enforced in `app/security/password_validator.py`:
   pathologically long inputs to the hashing function.
 - **Requires upper/lower/digit/special characters** — increases the
   effective character-set size and therefore the guessing search space.
-- **Common-password rejection** — length/complexity rules alone don't stop
-  someone from choosing `Password1!`, which is both "compliant" and among the
-  first entries any attacker's dictionary tries. The demo ships a small
-  illustrative list; a production deployment would check against the full
-  "Have I Been Pwned" Pwned Passwords corpus via its k-anonymity API (only a
+- **Breach-password rejection (Have I Been Pwned)** — length/complexity
+  rules alone don't stop someone from choosing `Password1!`, which is both
+  "compliant" and among the first entries any attacker's dictionary tries.
+  Every submitted password is checked against the full "Have I Been Pwned"
+  Pwned Passwords corpus via its k-anonymity range API — only a 5-character
   hash prefix is sent, so the real password is never transmitted to a third
-  party).
+  party. See §3a below for full detail. If HIBP is unreachable, the check
+  falls back to a small local list of the most common passwords rather than
+  allowing an unchecked registration through.
 - **Password history (last 5) blocked on reuse** — stops the common
   workaround of cycling back to an old, possibly-already-compromised
   password when forced to rotate.
@@ -107,6 +109,44 @@ Enforced in `app/security/password_validator.py`:
   by some modern guidance (e.g. NIST 800-63B) to encourage weaker passwords
   if over-used. It is included primarily to demonstrate the mechanism for the
   review.
+
+### 3a. Breach-Password Check — Have I Been Pwned Integration
+
+**How the check works (k-anonymity model):**
+1. The submitted password is hashed locally using SHA-1.
+2. Only the **first 5 characters** of that hash are sent to HIBP's API
+   (`GET /range/{prefix}`).
+3. HIBP returns every hash suffix in its database that shares that same
+   5-character prefix — typically several hundred to a few thousand
+   entries — each paired with how many times it has appeared in known
+   breaches.
+4. The full hash suffix is compared **locally** against that returned
+   list to determine whether there's a match.
+
+At no point does the full password, or even its full hash, leave the
+server. HIBP only ever sees a 5-character prefix shared by thousands of
+unrelated passwords, so it cannot feasibly determine which exact password
+was checked.
+
+**Fallback behavior:** if the HIBP API is unreachable (network failure,
+timeout, or the service being down), the check fails safe by falling back
+to the original small local list of common passwords rather than silently
+allowing an unchecked password through. This trades some breach-detection
+coverage for availability, so a registration can never be permanently
+blocked by a third-party outage.
+
+**Testing:** because the check depends on a live external API, the test
+suite mocks `check_pwned()` via an `autouse` pytest fixture in
+`conftest.py`, so all existing tests run deterministically offline without
+depending on network access or on whether a given test password happens to
+appear in a real breach dump. A dedicated test,
+`test_registration_rejects_breached_password`, overrides the mock to
+simulate a breached password and confirms the rejection path works.
+
+**Manually verified:** registering with the password `password123` returns
+a `400` with the message *"This password has appeared in 2,266,543 known
+data breaches; choose a different one."* A strong, randomly generated
+password registers successfully with no breach-related error.
 
 ---
 
@@ -182,13 +222,68 @@ counting queries without scanning free-text log entries.
 ## 8. Known Limitations (be upfront about these in the viva)
 
 - No token revocation list yet for JWTs (see §5).
-- The common-password list is illustrative, not the full breach corpus.
-- SQLite is used for the demo; `DATABASE_URL` can point at PostgreSQL for a
-  production-shaped deployment (SQLAlchemy makes this a config change, not a
-  code change).
+- SQLite is used for local development by default; `DATABASE_URL` can
+  point at PostgreSQL for a production-shaped deployment. This was
+  initially assumed to be a pure config change, but testing it end-to-end
+  surfaced a real bug (see §9) that required a small code fix, not just a
+  config swap.
 - TLS termination is expected to be handled by a reverse proxy (nginx/Caddy)
   in front of the container — the app itself serves plain HTTP, matching how
   Gunicorn deployments are normally fronted.
 - The email-OTP alternative mentioned in early planning was intentionally
   narrowed to TOTP-only for this build, since TOTP doesn't depend on a
   working SMTP relay for the demo to function offline.
+
+---
+
+## 9. PostgreSQL End-to-End — A Race Condition SQLite Was Hiding
+
+**What was tested:** the Docker Compose setup includes an optional
+Postgres service (`db`). Enabling it and running the full stack against a
+real Postgres instance surfaced a bug that never appeared against SQLite.
+
+**The bug:** the container starts Gunicorn with 2 worker processes. Each
+worker independently imports the Flask app, and `create_app()` calls
+`db.create_all()` on every import. Against SQLite, this went unnoticed —
+SQLite's whole-file locking effectively serializes concurrent writers, so
+the race was invisible. Against Postgres, both workers raced to create the
+same tables at nearly the same instant, and the loser crashed with:
+
+```
+psycopg2.errors.UniqueViolation: duplicate key value violates unique
+constraint "pg_class_relname_nsp_index"
+```
+
+Gunicorn's supervisor restarted the crashed worker automatically, so the
+app appeared to recover on its own — but this was fragile, timing-dependent
+luck rather than correct behavior, and would resurface unpredictably on any
+fresh deployment.
+
+**The fix:** table creation was moved out of the app-boot path shared by
+every worker and into a dedicated `entrypoint.sh` script that runs once, in
+a single process, before Gunicorn starts and forks any workers:
+
+```sh
+#!/bin/sh
+set -e
+python -c "from app import create_app; from app.extensions import db; app = create_app(); app.app_context().push(); db.create_all()"
+exec gunicorn --bind 0.0.0.0:5000 --workers 2 run:app
+```
+
+`db.create_all()` is naturally idempotent (it only creates tables that
+don't already exist), so this is safe to run on every container restart. By
+the time Gunicorn's workers boot and each one calls `create_app()` again
+individually, the tables already exist, so those calls become harmless
+no-ops instead of racing each other.
+
+**Why this matters beyond just fixing the crash:** this is a concrete,
+reproducible example of a bug class that only surfaces under a
+production-shaped database, reinforcing why "the config supports Postgres"
+is not the same claim as "Postgres works end-to-end" — the latter needs to
+actually be run and tested, not just assumed from SQLAlchemy's
+database-agnostic API.
+
+**Verified:** registration was tested directly against the running
+Postgres container (bypassing the API layer to rule out any other
+variable) and confirmed via `psql` that rows persist correctly with
+sequential IDs and no data loss across repeated registrations.
