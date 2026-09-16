@@ -6,7 +6,7 @@ import jwt
 from flask import request, jsonify, g
 
 from app.security.jwt_utils import decode_token
-from app.models import User
+from app.models import User, RevokedToken
 
 
 def _extract_bearer_token():
@@ -35,11 +35,18 @@ def token_required(purpose="access"):
             if payload.get("purpose") != purpose:
                 return jsonify({"error": "Token not valid for this operation."}), 401
 
+            # Cancelled-token check: even if the signature and expiry are fine,
+            # a token that's been logged-out/revoked must stop working immediately.
+            jti = payload.get("jti")
+            if jti and RevokedToken.query.filter_by(jti=jti).first():
+                return jsonify({"error": "Token has been revoked."}), 401
+
             user = User.query.get(payload.get("sub"))
             if not user or not user.is_active:
                 return jsonify({"error": "User not found or inactive."}), 401
 
             g.current_user = user
+            g.current_jti = jti  # stashed here so logout() can find it later
             return f(*args, **kwargs)
 
         return wrapper
