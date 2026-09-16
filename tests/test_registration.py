@@ -28,3 +28,11 @@ def test_password_never_stored_in_plaintext(client, app):
         user = User.query.filter_by(username="alice").first()
         assert user.password_hash != "Str0ng!Passw0rd"
         assert user.password_hash.startswith("$2b$")
+
+
+def test_registration_rejects_breached_password(client, monkeypatch):
+    monkeypatch.setattr("app.security.password_validator.check_pwned", lambda pw: 999999)
+    resp = register(client, password="Str0ng!Passw0rd")
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert any("data breaches" in detail for detail in body["details"])
