@@ -8,6 +8,8 @@ Tables map directly onto the modules described in the project abstract:
   - Lockout            -> Brute Force Prevention module (active/expired locks)
   - AuditLog           -> Security Audit Logging module
   - RecoveryCode        -> TOTP MFA module (one-time backup codes)
+  - RevokedToken        -> revoked/cancelled JWTs (logout / session revocation)
+  - Session             -> active login sessions per user (view/end sessions)
 """
 
 from datetime import datetime, timezone
@@ -47,6 +49,9 @@ class User(db.Model):
     )
     recovery_codes = db.relationship(
         "RecoveryCode", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    sessions = db.relationship(
+        "Session", backref="user", lazy=True, cascade="all, delete-orphan"
     )
 
     def to_public_dict(self):
@@ -121,3 +126,39 @@ class RecoveryCode(db.Model):
     code_hash = db.Column(db.String(255), nullable=False)
     used = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+
+class RevokedToken(db.Model):
+    """A cancelled token. If a token's jti shows up here, it can no longer be used,
+    even if it hasn't technically expired yet."""
+    __tablename__ = "revoked_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    revoked_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)  # copy of the token's own expiry,
+    # so a cleanup job can safely delete old rows once the token would've expired anyway
+
+
+class Session(db.Model):
+    """One row per login. Lets a user see 'I'm logged in on 2 devices' and end one."""
+    __tablename__ = "sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    jti = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    refresh_jti = db.Column(db.String(36), nullable=True, index=True)
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "created_at": self.created_at.isoformat(),
+            "last_seen_at": self.last_seen_at.isoformat(),
+        }
