@@ -1,11 +1,13 @@
 """
 Admin REST endpoints -- power the security dashboard.
 
-  GET  /api/admin/audit-log        - paginated audit trail
-  GET  /api/admin/login-attempts   - recent raw login attempts (all users)
-  GET  /api/admin/lockouts         - active + historical lockouts
-  POST /api/admin/unlock/<user_id> - manual override to clear an active lockout
-  GET  /api/admin/stats            - summary counters for dashboard cards
+  GET  /api/admin/audit-log         - paginated audit trail
+  GET  /api/admin/login-attempts    - recent raw login attempts (all users)
+  GET  /api/admin/lockouts          - active + historical lockouts
+  POST /api/admin/unlock/<user_id>  - manual override to clear an active lockout
+  GET  /api/admin/stats             - summary counters for dashboard cards
+  GET  /api/admin/verify-audit-log  - recompute the tamper-evident hash chain
+                                       and report whether it's intact
 """
 
 from datetime import datetime, timezone
@@ -15,7 +17,7 @@ from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models import AuditLog, LoginAttempt, Lockout, User
 from app.security.decorators import token_required, admin_required
-from app.security.audit_logger import log_event
+from app.security.audit_logger import log_event, verify_chain
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -109,4 +111,21 @@ def stats():
         "failed_login_attempts": failed_attempts,
         "active_lockouts": active_lockouts,
         "mfa_enabled_users": mfa_enabled_users,
+    }), 200
+
+
+@admin_bp.route("/verify-audit-log", methods=["GET"])
+@token_required(purpose="access")
+@admin_required
+def verify_audit_log():
+    is_intact, broken_at_id = verify_chain()
+    return jsonify({
+        "intact": is_intact,
+        "broken_at_entry_id": broken_at_id,
+        "message": (
+            "Audit log chain is intact -- no tampering detected."
+            if is_intact
+            else f"Chain integrity broken at entry id={broken_at_id}. "
+                 "This entry (or one before it) was likely altered outside the application."
+        ),
     }), 200
