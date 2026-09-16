@@ -1,12 +1,14 @@
 """Route decorators enforcing JWT auth (and its 'purpose' claim)."""
 
+from datetime import datetime, timezone
 from functools import wraps
 
 import jwt
 from flask import request, jsonify, g
 
+from app.extensions import db
 from app.security.jwt_utils import decode_token
-from app.models import User, RevokedToken
+from app.models import User, RevokedToken, Session
 
 
 def _extract_bearer_token():
@@ -40,6 +42,14 @@ def token_required(purpose="access"):
             jti = payload.get("jti")
             if jti and RevokedToken.query.filter_by(jti=jti).first():
                 return jsonify({"error": "Token has been revoked."}), 401
+
+            # Update "last seen" for the matching session so the sessions list
+            # reflects real activity, not just the original login time.
+            if jti and purpose == "access":
+                session = Session.query.filter_by(jti=jti).first()
+                if session:
+                    session.last_seen_at = datetime.now(timezone.utc)
+                    db.session.commit()
 
             user = User.query.get(payload.get("sub"))
             if not user or not user.is_active:
