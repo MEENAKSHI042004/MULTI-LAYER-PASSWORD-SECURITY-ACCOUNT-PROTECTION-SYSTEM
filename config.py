@@ -54,6 +54,7 @@ class Config:
     # --- Rate limiting (Flask-Limiter) ---
     RATELIMIT_DEFAULT = "100 per hour"
     RATELIMIT_LOGIN = "10 per minute"
+    RATELIMIT_LOGIN_PER_USERNAME = "5 per minute"
     RATELIMIT_REGISTER = "3 per minute"
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
 
