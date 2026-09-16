@@ -52,6 +52,16 @@ def _client_ip():
     return request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
 
 
+def _username_from_request():
+    """Rate-limit key based on the username in the request body, not the caller's
+    IP. This is what stops someone from spreading login attempts for ONE account
+    across many different IPs to dodge the per-IP limit -- no matter which IP a
+    request comes from, hitting the same account too fast still throttles."""
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip().lower()
+    return username or "unknown"
+
+
 def _create_session(user_id, jti, ip, refresh_jti=None):
     db.session.add(Session(
         user_id=user_id, jti=jti, ip_address=ip,
@@ -100,6 +110,7 @@ def register():
 
 @auth_bp.route("/login", methods=["POST"])
 @limiter.limit(lambda: current_app.config["RATELIMIT_LOGIN"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_LOGIN_PER_USERNAME"], key_func=_username_from_request)
 def login():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
@@ -269,9 +280,6 @@ def revoke_session(session_id):
 
     session.revoked_at = datetime.now(timezone.utc)
 
-    # We don't have the raw token for a different session -- only its jti --
-    # so we can't read its real expiry. Revoking for one full access-token
-    # lifetime from now safely covers it either way.
     minutes = current_app.config["JWT_ACCESS_TOKEN_MINUTES"]
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     db.session.add(RevokedToken(jti=session.jti, expires_at=expires_at))

@@ -6,7 +6,7 @@ Tables map directly onto the modules described in the project abstract:
   - PasswordHistory    -> Password Validator (reuse prevention)
   - LoginAttempt       -> Brute Force Prevention module (raw attempt log)
   - Lockout            -> Brute Force Prevention module (active/expired locks)
-  - AuditLog           -> Security Audit Logging module
+  - AuditLog           -> Security Audit Logging module (tamper-evident hash chain)
   - RecoveryCode        -> TOTP MFA module (one-time backup codes)
   - RevokedToken        -> revoked/cancelled JWTs (logout / session revocation)
   - Session             -> active login sessions per user (view/end sessions)
@@ -107,6 +107,12 @@ class AuditLog(db.Model):
     details = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
+    # Tamper-evidence: each entry's hash is calculated from its own data PLUS
+    # the previous entry's hash. Editing or deleting any row breaks this chain
+    # at that exact point, which verify_chain() in audit_logger.py detects.
+    prev_hash = db.Column(db.String(64), nullable=True)  # None only for the very first entry
+    hash = db.Column(db.String(64), nullable=False)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -115,6 +121,8 @@ class AuditLog(db.Model):
             "ip_address": self.ip_address,
             "details": self.details,
             "created_at": self.created_at.isoformat(),
+            "hash": self.hash,
+            "prev_hash": self.prev_hash,
         }
 
 
@@ -136,8 +144,7 @@ class RevokedToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     jti = db.Column(db.String(36), unique=True, nullable=False, index=True)
     revoked_at = db.Column(db.DateTime, default=utcnow, nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)  # copy of the token's own expiry,
-    # so a cleanup job can safely delete old rows once the token would've expired anyway
+    expires_at = db.Column(db.DateTime, nullable=False)
 
 
 class Session(db.Model):
