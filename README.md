@@ -47,6 +47,13 @@ Then visit http://localhost:5000. Set `FLASK_SECRET_KEY`, `JWT_SECRET_KEY`,
 and `SEED_ADMIN_PASSWORD` via a `.env` file or exported env vars before
 running in anything other than a throwaway demo.
 
+## Deploying to Render
+
+Connect this repository in Render and it will automatically detect the
+root-level `render.yaml` Blueprint. Set `FLASK_SECRET_KEY`, `JWT_SECRET_KEY`,
+`DATABASE_URL`, and `SEED_ADMIN_PASSWORD` when prompted, then deploy the
+service.
+
 ## Running tests
 
 ```bash
