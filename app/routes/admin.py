@@ -15,6 +15,12 @@ import io
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, g, Response
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+from xml.sax.saxutils import escape
 
 from app.extensions import db
 from app.models import AuditLog, LoginAttempt, Lockout, User
@@ -61,6 +67,70 @@ def export_audit_log():
         output.getvalue(),
         content_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+    )
+
+
+@admin_bp.route("/audit-log/export-pdf", methods=["GET"])
+@token_required(purpose="access")
+@admin_required
+def export_audit_log_pdf():
+    output = io.BytesIO()
+    document = SimpleDocTemplate(
+        output,
+        pagesize=landscape(letter),
+        rightMargin=0.35 * inch,
+        leftMargin=0.35 * inch,
+        topMargin=0.35 * inch,
+        bottomMargin=0.35 * inch,
+    )
+    styles = getSampleStyleSheet()
+    cell_style = styles["BodyText"]
+    cell_style.fontSize = 7
+    cell_style.leading = 8
+
+    rows = [[
+        "ID", "User ID", "Event", "IP address", "Details",
+        "Created at", "Previous hash", "Hash",
+    ]]
+    entries = AuditLog.query.order_by(AuditLog.id.asc()).all()
+    for entry in entries:
+        rows.append([
+            str(entry.id),
+            str(entry.user_id) if entry.user_id is not None else "",
+            entry.event_type or "",
+            entry.ip_address or "",
+            entry.details or "",
+            entry.created_at.isoformat(),
+            entry.prev_hash or "",
+            entry.hash or "",
+        ])
+
+    table = Table(
+        [[cell if row_index == 0 else Paragraph(escape(cell), cell_style)
+          for cell in row]
+         for row_index, row in enumerate(rows)],
+        repeatRows=1,
+        colWidths=[0.35 * inch, 0.5 * inch, 0.85 * inch, 0.85 * inch,
+                   2.1 * inch, 1.45 * inch, 2.35 * inch, 2.35 * inch],
+    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#9ca3af")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f4f6")]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    document.build([table])
+
+    return Response(
+        output.getvalue(),
+        content_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=audit_log.pdf"},
     )
 
 

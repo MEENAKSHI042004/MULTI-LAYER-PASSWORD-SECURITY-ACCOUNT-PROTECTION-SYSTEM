@@ -50,6 +50,30 @@ def test_admin_can_export_full_audit_log_as_csv(client, app):
     assert b",register," in response.data
 
 
+def test_admin_can_export_full_audit_log_as_pdf(client, app):
+    register(client)
+    headers = _admin_headers(app, client)
+
+    response = client.get("/api/admin/audit-log/export-pdf", headers=headers)
+
+    assert response.status_code == 200
+    assert response.content_type == "application/pdf"
+    assert response.headers["Content-Disposition"] == "attachment; filename=audit_log.pdf"
+    assert response.data.startswith(b"%PDF-")
+
+
+def test_non_admin_cannot_export_audit_log_as_pdf(client):
+    register(client)
+    token = login(client).get_json()["access_token"]
+
+    response = client.get(
+        "/api/admin/audit-log/export-pdf",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_password_reuse_is_blocked(client):
     register(client)
     resp = login(client)
