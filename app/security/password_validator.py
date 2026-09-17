@@ -9,6 +9,7 @@ done in the auth route).
 """
 
 import hashlib
+import math
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,24 @@ COMMON_PASSWORDS = {
 }
 
 HIBP_RANGE_URL = "https://api.pwnedpasswords.com/range/{prefix}"
+
+
+def calculate_entropy_bits(password: str) -> float:
+    """Estimate password entropy from its length and observed character sets."""
+    if not password:
+        return 0.0
+
+    pool_size = 0
+    if re.search(r"[a-z]", password):
+        pool_size += 26
+    if re.search(r"[A-Z]", password):
+        pool_size += 26
+    if re.search(r"[0-9]", password):
+        pool_size += 10
+    if re.search(r"[^A-Za-z0-9]", password):
+        pool_size += 32
+
+    return len(password) * math.log2(pool_size)
 
 
 def check_pwned(password: str) -> int:
