@@ -10,9 +10,11 @@ Admin REST endpoints -- power the security dashboard.
                                        and report whether it's intact
 """
 
+import csv
+import io
 from datetime import datetime, timezone
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, Response
 
 from app.extensions import db
 from app.models import AuditLog, LoginAttempt, Lockout, User
@@ -29,6 +31,37 @@ def audit_log():
     limit = min(int(request.args.get("limit", 50)), 500)
     entries = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(limit).all()
     return jsonify({"entries": [e.to_dict() for e in entries]}), 200
+
+
+@admin_bp.route("/audit-log/export", methods=["GET"])
+@token_required(purpose="access")
+@admin_required
+def export_audit_log():
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([
+        "id", "user_id", "event_type", "ip_address", "details",
+        "created_at", "prev_hash", "hash",
+    ])
+
+    entries = AuditLog.query.order_by(AuditLog.id.asc()).all()
+    for entry in entries:
+        writer.writerow([
+            entry.id,
+            entry.user_id,
+            entry.event_type,
+            entry.ip_address,
+            entry.details,
+            entry.created_at.isoformat(),
+            entry.prev_hash,
+            entry.hash,
+        ])
+
+    return Response(
+        output.getvalue(),
+        content_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+    )
 
 
 @admin_bp.route("/login-attempts", methods=["GET"])

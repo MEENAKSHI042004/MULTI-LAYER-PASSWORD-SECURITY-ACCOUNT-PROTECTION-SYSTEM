@@ -37,6 +37,19 @@ def test_audit_log_records_registration_and_login(client, app):
     assert "login_success" in events
 
 
+def test_admin_can_export_full_audit_log_as_csv(client, app):
+    register(client)
+    headers = _admin_headers(app, client)
+
+    response = client.get("/api/admin/audit-log/export", headers=headers)
+
+    assert response.status_code == 200
+    assert response.content_type == "text/csv"
+    assert response.headers["Content-Disposition"] == "attachment; filename=audit_log.csv"
+    assert b"id,user_id,event_type,ip_address,details,created_at,prev_hash,hash" in response.data
+    assert b",register," in response.data
+
+
 def test_password_reuse_is_blocked(client):
     register(client)
     resp = login(client)
