@@ -56,9 +56,25 @@ def create_refresh_token(user_id: int) -> tuple[str, str]:
 def decode_token(token: str) -> dict:
     """Decode and validate a token's signature/expiry. Raises jwt exceptions on failure.
     The returned payload includes "jti" -- callers that need revocation/session
-    checks (e.g. the token_required decorator) read it from here."""
-    return jwt.decode(
-        token,
-        current_app.config["JWT_SECRET_KEY"],
-        algorithms=[current_app.config["JWT_ALGORITHM"]],
-    )
+    checks (e.g. the token_required decorator) read it from here.
+
+    Tries JWT_SECRET_KEY first, then JWT_SECRET_KEY_PREVIOUS if set. This lets a
+    secret be rotated without instantly invalidating every outstanding token:
+    tokens signed with the old secret keep verifying (until they naturally
+    expire) while all new tokens are signed with the new one."""
+    secrets_to_try = [current_app.config["JWT_SECRET_KEY"]]
+    if current_app.config.get("JWT_SECRET_KEY_PREVIOUS"):
+        secrets_to_try.append(current_app.config["JWT_SECRET_KEY_PREVIOUS"])
+
+    last_error = None
+    for secret in secrets_to_try:
+        try:
+            return jwt.decode(
+                token,
+                secret,
+                algorithms=[current_app.config["JWT_ALGORITHM"]],
+            )
+        except jwt.InvalidSignatureError as e:
+            last_error = e
+            continue
+    raise last_error
