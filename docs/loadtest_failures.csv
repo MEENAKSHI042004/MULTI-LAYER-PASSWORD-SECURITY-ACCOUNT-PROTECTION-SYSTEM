@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,/api/auth/login [wrong password],HTTPError('429 Client Error: TOO MANY REQUESTS for url: /api/auth/login [wrong password]'),6909,2026-09-19T12:55:06Z,2026-09-19T12:55:50Z
+POST,/api/auth/login [wrong password],HTTPError('401 Client Error: UNAUTHORIZED for url: /api/auth/login [wrong password]'),5,2026-09-19T12:55:07Z,2026-09-19T12:55:07Z
