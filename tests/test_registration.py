@@ -27,7 +27,10 @@ def test_password_never_stored_in_plaintext(client, app):
     with app.app_context():
         user = User.query.filter_by(username="alice").first()
         assert user.password_hash != "Str0ng!Passw0rd"
-        assert user.password_hash.startswith("$2b$")
+        # Argon2id hashes are self-identifying via this prefix; this also
+        # confirms the migration off bcrypt (which used $2b$) for all new
+        # registrations.
+        assert user.password_hash.startswith("$argon2id$")
 
 
 def test_registration_rejects_breached_password(client, monkeypatch):
