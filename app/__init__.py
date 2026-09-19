@@ -6,6 +6,7 @@ from flask import Flask, send_from_directory
 
 from config import Config
 from app.extensions import db, limiter
+from flask_talisman import Talisman
 
 
 def create_app(config_object=Config):
@@ -18,6 +19,19 @@ def create_app(config_object=Config):
 
     db.init_app(app)
     limiter.init_app(app)
+    Talisman(
+        app,
+        force_https=False,
+        strict_transport_security=True,
+        session_cookie_secure=False,
+        content_security_policy={
+            'default-src': "'self'",
+            'script-src': "'self'",
+            'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
+            'style-src-elem': "'self' 'unsafe-inline' https://fonts.googleapis.com",
+            'font-src': "'self' https://fonts.gstatic.com",
+        },
+    )
 
     from app.routes.auth import auth_bp
     from app.routes.admin import admin_bp
