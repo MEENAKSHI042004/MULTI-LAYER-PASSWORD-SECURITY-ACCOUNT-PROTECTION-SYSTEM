@@ -315,3 +315,49 @@ database-agnostic API.
 Postgres container (bypassing the API layer to rule out any other
 variable) and confirmed via `psql` that rows persist correctly with
 sequential IDs and no data loss across repeated registrations.
+
+---
+
+## 10. Finding: Per-Username Rate Limiting Interacts With Account Lockout
+
+**What was tested:** a credential-stuffing simulation against a single
+test account, using a curated list of ~50 of the most common breached
+passwords, to measure how many attempts an attacker gets before the
+account is locked.
+
+**What was observed:** the account was not locked after the expected
+5 failed attempts (`MAX_FAILED_ATTEMPTS = 5`). Instead, it took 16
+attempts across several separate 1-minute windows before a lockout
+finally triggered.
+
+**Root cause:** the newly added per-username rate limiter
+(`RATELIMIT_LOGIN_PER_USERNAME`) is configured at exactly "5 per
+minute" — the same threshold as `MAX_FAILED_ATTEMPTS`. Because the rate
+limiter runs first (as a route decorator, before the request body is
+even processed), it blocks the 6th request with a `429` before the
+lockout logic ever sees a 5th recorded failure in the database. The
+account is never actually locked in that window; it's simply
+rate-limited into silence. Only across multiple separate 1-minute
+windows does the recorded failure count in the database eventually
+exceed 5, at which point the lockout logic (which has no time-window
+expiry — see §2) finally fires.
+
+**Why this matters:** the two defenses were intended to reinforce each
+other, but as configured they compete for the same budget of requests.
+An attacker distributing a credential-stuffing attempt across multiple
+minutes (rather than sending 50 requests instantly) effectively gets
+extra "free" guesses per minute that never count toward the lockout
+threshold in that window, meaningfully delaying when the account
+actually locks.
+
+**Recommended fix:** set `RATELIMIT_LOGIN_PER_USERNAME` higher than
+`MAX_FAILED_ATTEMPTS` (e.g. 8–10 per minute) so the lockout has room to
+fire on genuine password failures, while the rate limiter remains a
+backstop against very high-volume or distributed attempts rather than
+competing with the lockout for the same 5 requests.
+
+**Verified:** confirmed via an isolated, deliberately paced test (one
+request every 2 seconds, well under 1 per minute) — the rate limiter
+still returned `429` on the 6th request, proving the interaction is
+independent of request timing/burstiness and is a genuine threshold
+overlap, not a timing artifact.
