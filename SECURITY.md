@@ -318,7 +318,7 @@ sequential IDs and no data loss across repeated registrations.
 
 ---
 
-## 10. Finding: Per-Username Rate Limiting Interacts With Account Lockout
+## 10. Finding: Per-Username Rate Limiting Interacts With Account Lockout (Fixed)
 
 **What was tested:** a credential-stuffing simulation against a single
 test account, using a curated list of ~50 of the most common breached
@@ -361,3 +361,12 @@ request every 2 seconds, well under 1 per minute) — the rate limiter
 still returned `429` on the 6th request, proving the interaction is
 independent of request timing/burstiness and is a genuine threshold
 overlap, not a timing artifact.
+
+**Fix applied:** `RATELIMIT_LOGIN_PER_USERNAME` raised from "5 per
+minute" to "10 per minute" in `config.py`, keeping it above
+`MAX_FAILED_ATTEMPTS` so the rate limiter no longer intercepts the
+request that would register the 5th failure. Re-verified against a
+fresh test account: attempts 1–5 return `401 Invalid username or
+password`, and the very next attempt returns `423 Account temporarily
+locked` — lockout now fires at the intended 5th failure, in a single
+window, with no rate-limit interference.

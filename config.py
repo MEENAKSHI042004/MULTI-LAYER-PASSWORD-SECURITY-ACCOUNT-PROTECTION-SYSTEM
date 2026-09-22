@@ -55,7 +55,11 @@ class Config:
     # --- Rate limiting (Flask-Limiter) ---
     RATELIMIT_DEFAULT = "100 per hour"
     RATELIMIT_LOGIN = "10 per minute"
-    RATELIMIT_LOGIN_PER_USERNAME = "5 per minute"
+    # Kept above MAX_FAILED_ATTEMPTS (5): if this matches or undercuts the
+    # lockout threshold, the rate limiter blocks the request that would have
+    # been the 5th failure, so lockout never actually gets to fire at 5 --
+    # found via credential-stuffing simulation (see SECURITY.md).
+    RATELIMIT_LOGIN_PER_USERNAME = "10 per minute"
     RATELIMIT_REGISTER = "3 per minute"
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
 
