@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Basecamp Supply Co.{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script>window.MLPSAPS_API_BASE = {{ api_base|tojson }};</script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a class="wordmark" href="/">Basecamp<span>Supply Co.</span></a>
+      <nav class="main-nav">
+        <a href="/">Shop</a>
+        <a href="/cart" id="nav-cart">Cart<span id="cart-count" class="cart-badge" hidden>0</span></a>
+        <span id="nav-auth-area" class="nav-auth-area">
+          <a href="/login" id="nav-login">Log in</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Basecamp Supply Co. &mdash; demo storefront for exercising a shared MLPSAPS login.</p>
+    </div>
+  </footer>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/cart.js"></script>
+  <script src="/static/js/nav.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -7,6 +7,7 @@ from flask import Flask, send_from_directory
 from config import Config
 from app.extensions import db, limiter
 from flask_talisman import Talisman
+from flask_cors import CORS
 
 
 def create_app(config_object=Config):
@@ -19,6 +20,20 @@ def create_app(config_object=Config):
 
     db.init_app(app)
     limiter.init_app(app)
+
+    # CORS is scoped to /api/* only (the dashboard templates served at "/" don't
+    # need it) and to the storefront's own origin(s) -- never "*". The JWT is
+    # sent as an Authorization header, not a cookie, so credentials support is
+    # left off; that also means a stolen/misconfigured origin can't ride on the
+    # user's cookies anyway.
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": app.config["CORS_ALLOWED_ORIGINS"]}},
+        supports_credentials=False,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "OPTIONS"],
+    )
+
     Talisman(
         app,
         force_https=False,

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Checkout -- Basecamp Supply Co.{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Checkout</h1>
+  <div id="checkout-loading"><p>Checking your session with MLPSAPS...</p></div>
+  <div id="checkout-panel" hidden>
+    <p>Signed in as <strong id="checkout-username"></strong>. Order summary:</p>
+    <div id="checkout-summary"></div>
+    <button type="button" class="btn btn-accent" id="place-order-btn">Place order</button>
+    <div id="order-result"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/auth-guard.js"></script>
+<script>
+  const PRODUCTS = {{ products|tojson }};
+
+  function productById(id) {
+    return PRODUCTS.find((p) => String(p.id) === String(id));
+  }
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return; // requireAuth() already redirected to /login
+
+    document.getElementById("checkout-loading").hidden = true;
+    document.getElementById("checkout-panel").hidden = false;
+    document.getElementById("checkout-username").textContent = user.username;
+
+    const cart = Cart.read();
+    const ids = Object.keys(cart);
+    const summary = document.getElementById("checkout-summary");
+    const placeOrderBtn = document.getElementById("place-order-btn");
+
+    if (ids.length === 0) {
+      summary.innerHTML = "<p>Your cart is empty. <a href=\"/\">Browse gear</a>.</p>";
+      placeOrderBtn.disabled = true;
+      return;
+    }
+
+    let total = 0;
+    summary.innerHTML = ids.map((id) => {
+      const product = productById(id);
+      const qty = cart[id];
+      const lineTotal = product.price * qty;
+      total += lineTotal;
+      return `<div class="cart-row"><span class="name">${product.name} &times; ${qty}</span><span>$${lineTotal.toFixed(2)}</span></div>`;
+    }).join("") + `<div class="cart-total-row"><span>Total</span><span>$${total.toFixed(2)}</span></div>`;
+
+    placeOrderBtn.addEventListener("click", () => {
+      // Demo storefront: no real payment/order backend, just proves the
+      // checkout flow is gated on a real MLPSAPS-verified session.
+      Cart.clear();
+      document.getElementById("order-result").innerHTML =
+        `<div class="notice notice-ok">Order placed for ${user.username}. Thanks for shopping Basecamp Supply Co.!</div>`;
+      placeOrderBtn.disabled = true;
+    });
+  })();
+</script>
+{% endblock %}

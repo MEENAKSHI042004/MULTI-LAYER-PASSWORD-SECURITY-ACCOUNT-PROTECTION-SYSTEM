@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Your cart -- Basecamp Supply Co.{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Your cart</h1>
+  <div id="cart-contents"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PRODUCTS = {{ products|tojson }};
+
+  function productById(id) {
+    return PRODUCTS.find((p) => String(p.id) === String(id));
+  }
+
+  function renderCart() {
+    const container = document.getElementById("cart-contents");
+    const cart = Cart.read();
+    const ids = Object.keys(cart);
+
+    if (ids.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>Your cart is empty.</p>
+          <a class="btn btn-accent" href="/">Browse gear</a>
+        </div>`;
+      return;
+    }
+
+    let total = 0;
+    const rows = ids.map((id) => {
+      const product = productById(id);
+      if (!product) return "";
+      const qty = cart[id];
+      const lineTotal = product.price * qty;
+      total += lineTotal;
+      return `
+        <div class="cart-row" data-id="${id}">
+          <div>
+            <div class="name">${product.name}</div>
+            <div>$${product.price.toFixed(2)} each</div>
+          </div>
+          <div class="qty-controls">
+            <button type="button" class="qty-minus" aria-label="Decrease quantity">&minus;</button>
+            <span>${qty}</span>
+            <button type="button" class="qty-plus" aria-label="Increase quantity">+</button>
+          </div>
+          <div>$${lineTotal.toFixed(2)}</div>
+          <button type="button" class="btn btn-outline remove-btn">Remove</button>
+        </div>`;
+    }).join("");
+
+    container.innerHTML = `
+      ${rows}
+      <div class="cart-total-row">
+        <span>Total</span>
+        <span>$${total.toFixed(2)}</span>
+      </div>
+      <p style="margin-top:24px">
+        <a class="btn btn-primary" href="/checkout">Checkout</a>
+      </p>
+    `;
+
+    container.querySelectorAll(".cart-row").forEach((row) => {
+      const id = row.dataset.id;
+      row.querySelector(".qty-plus").addEventListener("click", () => {
+        Cart.setQty(id, (Cart.read()[id] || 0) + 1);
+        renderCart();
+      });
+      row.querySelector(".qty-minus").addEventListener("click", () => {
+        Cart.setQty(id, (Cart.read()[id] || 0) - 1);
+        renderCart();
+      });
+      row.querySelector(".remove-btn").addEventListener("click", () => {
+        Cart.remove(id);
+        renderCart();
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", renderCart);
+</script>
+{% endblock %}

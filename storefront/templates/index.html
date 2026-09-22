@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Basecamp Supply Co. -- Gear for the trail{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">New season stock</p>
+    <h1>Gear that earns its weight on the trail.</h1>
+    <p>A small, honest kit list -- six pieces we'd actually carry ourselves. Add what you need, check out once you're signed in.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <h2>Shop all</h2>
+  <div class="product-grid">
+    {% for p in products %}
+    <div class="product-card">
+      <span class="tag">{{ p.tag }}</span>
+      <h3>{{ p.name }}</h3>
+      <p>{{ p.blurb }}</p>
+      <span class="price">${{ "%.2f"|format(p.price) }}</span>
+      <button class="btn btn-primary btn-block add-to-cart" data-id="{{ p.id }}" data-name="{{ p.name }}">Add to cart</button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll(".add-to-cart").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      Cart.add(btn.dataset.id, 1);
+      const original = btn.textContent;
+      btn.textContent = "Added";
+      setTimeout(() => (btn.textContent = original), 900);
+    });
+  });
+</script>
+{% endblock %}

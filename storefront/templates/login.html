@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Log in -- Basecamp Supply Co.{% endblock %}
+{% block content %}
+<div class="wrap">
+  <div class="form-card">
+    <h1>Log in</h1>
+    <div id="form-notice"></div>
+    <form id="login-form" novalidate>
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-accent btn-block" id="login-submit">Log in</button>
+    </form>
+    <p class="form-foot">New here? <a href="/register">Create an account</a></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById("login-form");
+  const notice = document.getElementById("form-notice");
+  const submitBtn = document.getElementById("login-submit");
+
+  function showNotice(kind, message) {
+    notice.innerHTML = `<div class="notice notice-${kind}">${message}</div>`;
+  }
+
+  function nextUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    return next && next.startsWith("/") ? next : "/account";
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    notice.innerHTML = "";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Logging in...";
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    // This hits MLPSAPS's real /api/auth/login endpoint directly. On success
+    // MLPSAPS.login() stores the returned JWT in sessionStorage for us.
+    const result = await MLPSAPS.login(username, password);
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Log in";
+
+    if (result.ok && result.data && result.data.access_token) {
+      window.location.href = nextUrl();
+      return;
+    }
+
+    if (result.data && result.data.mfa_required) {
+      showNotice(
+        "error",
+        "This account has MFA enabled. The storefront demo doesn't collect a TOTP code yet -- log in with an account that hasn't enabled MFA."
+      );
+      return;
+    }
+
+    if (result.status === 423) {
+      showNotice("error", result.data.error || "Account temporarily locked. Try again shortly.");
+      return;
+    }
+
+    showNotice("error", (result.data && result.data.error) || "Login failed.");
+  });
+</script>
+{% endblock %}

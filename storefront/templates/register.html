@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Create an account -- Basecamp Supply Co.{% endblock %}
+{% block content %}
+<div class="wrap">
+  <div class="form-card">
+    <h1>Create an account</h1>
+    <div id="form-notice"></div>
+    <form id="register-form" novalidate>
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required>
+      </div>
+      <button type="submit" class="btn btn-accent btn-block" id="register-submit">Create account</button>
+    </form>
+    <p class="form-foot">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById("register-form");
+  const notice = document.getElementById("form-notice");
+  const submitBtn = document.getElementById("register-submit");
+
+  function showNotice(kind, message) {
+    notice.innerHTML = `<div class="notice notice-${kind}">${message}</div>`;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    notice.innerHTML = "";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Creating account...";
+
+    const username = document.getElementById("username").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    // This hits MLPSAPS's real /api/auth/register endpoint directly from the
+    // browser -- not a copy of its validation logic.
+    const result = await MLPSAPS.register(username, email, password);
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Create account";
+
+    if (result.ok) {
+      showNotice("ok", "Account created. You can log in now.");
+      form.reset();
+      setTimeout(() => (window.location.href = "/login"), 900);
+    } else {
+      const detail = result.data && result.data.details
+        ? " " + result.data.details.join(" ")
+        : "";
+      const message = (result.data && result.data.error) || "Registration failed.";
+      showNotice("error", message + detail);
+    }
+  });
+</script>
+{% endblock %}

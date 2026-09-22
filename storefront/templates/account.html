@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Your account -- Basecamp Supply Co.{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Your account</h1>
+  <div id="account-loading"><p>Checking your session with MLPSAPS...</p></div>
+  <div id="account-panel" class="account-panel" hidden>
+    <dl>
+      <dt>Username</dt><dd id="acct-username"></dd>
+      <dt>Email</dt><dd id="acct-email"></dd>
+      <dt>MFA enabled</dt><dd id="acct-mfa"></dd>
+      <dt>Member since</dt><dd id="acct-created"></dd>
+    </dl>
+    <button type="button" class="btn btn-outline" id="account-logout-btn">Log out</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/auth-guard.js"></script>
+<script>
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return; // requireAuth() already redirected to /login
+
+    document.getElementById("account-loading").hidden = true;
+    const panel = document.getElementById("account-panel");
+    panel.hidden = false;
+
+    document.getElementById("acct-username").textContent = user.username;
+    document.getElementById("acct-email").textContent = user.email;
+    document.getElementById("acct-mfa").textContent = user.mfa_enabled ? "Yes" : "No";
+    document.getElementById("acct-created").textContent = new Date(user.created_at).toLocaleDateString();
+
+    document.getElementById("account-logout-btn").addEventListener("click", async () => {
+      await MLPSAPS.logout();
+      window.location.href = "/";
+    });
+  })();
+</script>
+{% endblock %}

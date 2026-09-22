@@ -59,6 +59,15 @@ class Config:
     RATELIMIT_REGISTER = "3 per minute"
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
 
+    # --- CORS ---
+    # Only the storefront's own origin may call the API cross-origin. Never use
+    # "*" here -- an auth API (login/register/me/tokens) with open CORS would
+    # let any website on the internet read a logged-in user's session data via
+    # a background fetch() from the victim's browser.
+    CORS_ALLOWED_ORIGINS = os.environ.get(
+        "CORS_ALLOWED_ORIGINS", "http://127.0.0.1:5001,http://localhost:5001"
+    ).split(",")
+
 
 class TestConfig(Config):
     TESTING = True
