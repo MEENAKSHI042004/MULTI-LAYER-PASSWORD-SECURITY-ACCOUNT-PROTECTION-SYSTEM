@@ -18,7 +18,7 @@ from flask import current_app
 HIBP_API_URL = "https://api.pwnedpasswords.com/range/"
 
 
-def _check_pwned(password: str) -> int:
+def check_pwned(password: str) -> int:
     """Returns how many times this password has appeared in known breaches
     (0 if never seen, or if the check couldn't be completed -- see below).
 
@@ -63,7 +63,7 @@ def validate_password_strength(password: str) -> list:
     if cfg["PASSWORD_REQUIRE_SPECIAL"] and not re.search(r"[^A-Za-z0-9]", password):
         errors.append("Password must contain at least one special character.")
 
-    breach_count = _check_pwned(password)
+    breach_count = check_pwned(password)
     if breach_count > 0:
         errors.append(
             f"This password has appeared in {breach_count:,} known data breaches; "
