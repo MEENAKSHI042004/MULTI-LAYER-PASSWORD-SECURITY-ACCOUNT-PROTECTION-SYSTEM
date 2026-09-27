@@ -12,6 +12,7 @@
     --panel: #10141B;
     --panel-raised: #161B24;
     --line: #232A36;
+    --line-strong: #303949;
     --text: #DCE3EC;
     --muted: #7E8AA0;
     --accent: #E15A4F;
@@ -19,6 +20,10 @@
     --ok: #4FBE8A;
     --warn: #E0A63C;
     --danger: #E15A4F;
+    --space-2: 10px;
+    --space-3: 14px;
+    --space-4: 18px;
+    --space-5: 24px;
     --mono: 'IBM Plex Mono', ui-monospace, monospace;
     --sans: 'IBM Plex Sans', -apple-system, sans-serif;
   }
@@ -31,8 +36,8 @@
 
   .rail{
     width:236px;flex-shrink:0;background:var(--panel);
-    border-right:1px solid var(--line);padding:24px 18px;
-    display:flex;flex-direction:column;gap:28px;
+    border-right:1px solid var(--line);padding:28px 18px;
+    display:flex;flex-direction:column;gap:30px;
   }
   .brand{display:flex;flex-direction:column;gap:2px;}
   .brand .mark{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.02em;}
@@ -41,7 +46,7 @@
 
   .nav{display:flex;flex-direction:column;gap:2px;}
   .nav button{
-    all:unset;cursor:pointer;padding:9px 10px;border-radius:6px;
+    all:unset;cursor:pointer;padding:9px var(--space-2);border-radius:6px;
     font-size:13.5px;color:var(--muted);font-family:var(--sans);
   }
   .nav button:hover{background:var(--panel-raised);color:var(--text);}
@@ -55,24 +60,26 @@
   .session-box .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:6px;}
   .dot.on{background:var(--ok);} .dot.off{background:#3A4150;}
 
-  .main{flex:1;padding:32px 40px;max-width:920px;}
+  .main{flex:1;padding:36px 42px;max-width:1040px;}
   .view{display:none;}
   .view.active{display:block;}
 
-  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
-  .lede{color:var(--muted);font-size:13.5px;margin:0 0 26px;max-width:60ch;line-height:1.6;}
+  h1{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 8px;}
+  .lede{color:var(--muted);font-size:14px;margin:0 0 30px;max-width:64ch;line-height:1.65;}
 
   .card{
-    background:var(--panel);border:1px solid var(--line);border-radius:10px;
-    padding:22px;margin-bottom:18px;
+    background:linear-gradient(155deg,rgba(255,255,255,.018),transparent 44%),var(--panel);
+    border:1px solid var(--line-strong);border-radius:8px;
+    padding:var(--space-5);margin-bottom:20px;
+    box-shadow:0 10px 26px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.025);
   }
-  .card h2{font-size:13px;font-weight:600;margin:0 0 16px;color:var(--text);}
+  .card h2{font-size:15px;font-weight:600;line-height:1.4;margin:0 0 var(--space-4);color:var(--text);}
   .card h2 .tag{font-family:var(--mono);font-size:10.5px;color:var(--muted);font-weight:400;margin-left:8px;}
 
-  label{display:block;font-size:12px;color:var(--muted);margin:0 0 5px;}
+  label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:0 0 7px;}
   input[type=text],input[type=password],input[type=email]{
-    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:6px;
-    padding:9px 11px;color:var(--text);font-family:var(--mono);font-size:13px;margin-bottom:14px;
+    width:100%;background:var(--bg);border:1px solid var(--line-strong);border-radius:6px;
+    padding:var(--space-2) 12px;color:var(--text);font-family:var(--mono);font-size:13px;margin-bottom:16px;
   }
   input:focus{outline:2px solid var(--accent-dim);outline-offset:1px;border-color:var(--accent);}
 
@@ -80,13 +87,15 @@
 
   button.btn{
     all:unset;cursor:pointer;background:var(--accent);color:#1A0A08;font-weight:600;
-    font-size:13px;padding:9px 16px;border-radius:6px;font-family:var(--sans);
+    font-size:13px;padding:10px 16px;border-radius:6px;font-family:var(--sans);
+    line-height:1.35;transition:filter .15s ease,transform .15s ease,border-color .15s ease;
   }
-  button.btn:hover{filter:brightness(1.08);}
+  button.btn:hover{filter:brightness(1.08);transform:translateY(-1px);}
   button.btn.secondary{background:var(--panel-raised);color:var(--text);border:1px solid var(--line);}
+  button.btn.secondary:hover{border-color:#465368;}
   button.btn:disabled{opacity:.5;cursor:not-allowed;}
 
-  .msg{font-family:var(--mono);font-size:12.5px;padding:10px 12px;border-radius:6px;margin-bottom:14px;display:none;white-space:pre-wrap;}
+  .msg{font-family:var(--mono);font-size:12px;line-height:1.55;padding:11px 13px;border-radius:6px;margin-bottom:16px;display:none;white-space:pre-wrap;}
   .msg.show{display:block;}
   .msg.error{background:rgba(225,90,79,.12);color:#F0958C;border:1px solid rgba(225,90,79,.3);}
   .msg.ok{background:rgba(79,190,138,.1);color:#8DDBB4;border:1px solid rgba(79,190,138,.28);}
@@ -99,20 +108,21 @@
   .security-key-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);}
   .security-key-name{font-size:13px;font-weight:600;}
   .security-key-date{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;}
+  .simulation-log{max-height:260px;overflow-y:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px;margin-top:14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;white-space:pre-wrap;color:var(--muted);}
 
-  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
-  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;}
-  .stat .num{font-family:var(--mono);font-size:24px;font-weight:600;}
-  .stat .label{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-3);margin-bottom:22px;}
+  .stat{background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;padding:var(--space-4);box-shadow:0 8px 20px rgba(0,0,0,.14);}
+  .stat .num{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1.2;}
+  .stat .label{font-size:12px;color:var(--muted);margin-top:7px;}
   .stat.alert .num{color:var(--danger);}
 
   table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
-  th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line);font-size:11px;text-transform:none;}
-  td{padding:7px 10px;border-bottom:1px solid var(--line);color:var(--text);}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:11px 12px;border-bottom:1px solid var(--line-strong);font-size:11px;text-transform:none;}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--text);}
   tr:last-child td{border-bottom:none;}
-  .pill{padding:2px 7px;border-radius:4px;font-size:10.5px;}
-  .pill.ok{background:rgba(79,190,138,.14);color:#79D6A8;}
-  .pill.fail{background:rgba(225,90,79,.14);color:#EE9088;}
+  .pill{display:inline-flex;align-items:center;min-height:22px;padding:3px 8px;border:1px solid transparent;border-radius:4px;font-family:var(--mono);font-size:10.5px;font-weight:600;line-height:1.2;white-space:nowrap;}
+  .pill.ok,.pill.success,.pill.expired{background:rgba(79,190,138,.12);border-color:rgba(79,190,138,.28);color:#8DDBB4;}
+  .pill.fail,.pill.active,.pill.locked{background:rgba(225,90,79,.12);border-color:rgba(225,90,79,.3);color:#F0958C;}
 
   .recovery-codes{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:14px;margin:12px 0;}
 
@@ -125,6 +135,24 @@
   .entropy-meter.fair .entropy-fill{background:var(--warn);}
   .entropy-meter.strong .entropy-fill{background:#6CA8E8;}
   .entropy-meter.very-strong .entropy-fill{background:var(--ok);}
+  @media (max-width:900px){
+    .main{padding:30px 26px;}
+    .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+  @media (max-width:640px){
+    .shell{display:block;}
+    .rail{width:100%;padding:18px;gap:18px;border-right:0;border-bottom:1px solid var(--line);}
+    .nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+    .session-box{margin-top:0;}
+    .main{padding:24px 16px;}
+    h1{font-size:21px;}
+    .card{padding:18px;margin-bottom:16px;}
+    .stat-grid{gap:10px;}
+    .stat{padding:14px;}
+    .stat .num{font-size:22px;}
+    table{font-size:11px;}
+    th,td{padding:8px;}
+  }
 </style>
 </head>
 <body>
@@ -281,6 +309,13 @@
       <div class="card">
         <h2>Lockouts <span class="tag">GET /api/admin/lockouts</span></h2>
         <table id="lockouts-table"><thead><tr><th>User ID</th><th>#</th><th>Locked at</th><th>Unlocks at</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div class="card">
+        <h2>Brute-force simulation <span class="tag">POST /api/admin/simulate-lockout</span></h2>
+        <div class="msg" id="simulation-msg"></div>
+        <button class="btn secondary" id="simulate-lockout-btn" onclick="runAttackSimulation()">Run Attack Simulation</button>
+        <div class="simulation-log" id="simulation-log" role="log" aria-live="polite">Simulation results will appear here.</div>
       </div>
     </section>
 

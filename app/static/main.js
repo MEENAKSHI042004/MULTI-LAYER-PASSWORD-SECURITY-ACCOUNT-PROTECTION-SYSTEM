@@ -344,6 +344,39 @@ async function loadDashboard(){
   ).join('');
 }
 
+async function runAttackSimulation(){
+  hideMsg('simulation-msg');
+  const button = document.getElementById('simulate-lockout-btn');
+  const log = document.getElementById('simulation-log');
+  if (!state.accessToken) { showMsg('simulation-msg', 'Log in as an admin account to run the simulation.', 'info'); return; }
+
+  button.disabled = true;
+  button.textContent = 'Running simulation...';
+  log.textContent = 'Starting attack simulation...';
+  log.scrollTop = log.scrollHeight;
+  try {
+    const { ok, data } = await api('/api/admin/simulate-lockout', { method:'POST', auth:'access' });
+    if (!ok) {
+      showMsg('simulation-msg', data.error || 'Could not run the attack simulation.', 'error');
+      return;
+    }
+
+    log.textContent = '';
+    for (const event of data.events || []) {
+      log.textContent += (log.textContent ? '\n' : '') + event.message;
+      log.scrollTop = log.scrollHeight;
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+    await loadDashboard();
+    showMsg('simulation-msg', data.message || 'Attack simulation completed.', 'ok');
+  } catch (error) {
+    showMsg('simulation-msg', error.message || 'Could not run the attack simulation.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Run Attack Simulation';
+  }
+}
+
 async function doUnlock(userId){
   const { ok, data } = await api('/api/admin/unlock/' + userId, { method:'POST', auth:'access' });
   if (!ok) { showMsg('dash-msg', data.error || 'Could not unlock user.', 'error'); return; }

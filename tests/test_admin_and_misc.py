@@ -1,4 +1,5 @@
 from tests.conftest import register, login
+from app.models import Lockout, User
 
 
 def _admin_headers(app, client):
@@ -25,6 +26,39 @@ def test_non_admin_cannot_access_dashboard(client):
     headers = {"Authorization": f"Bearer {token}"}
     resp = client.get("/api/admin/stats", headers=headers)
     assert resp.status_code == 403
+
+
+def test_admin_can_run_lockout_simulation_and_get_attempt_events(client, app):
+    headers = _admin_headers(app, client)
+
+    response = client.post("/api/admin/simulate-lockout", headers=headers)
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["rounds"] == 3
+    assert body["username"].startswith("lockout_test_")
+    assert sum(event["type"] == "attempt" for event in body["events"]) == (
+        app.config["MAX_FAILED_ATTEMPTS"] * 3
+    )
+    assert [event["duration_seconds"] for event in body["events"] if event["type"] == "lockout"] == [
+        app.config["BASE_LOCKOUT_SECONDS"] * app.config["LOCKOUT_BACKOFF_FACTOR"] ** index
+        for index in range(3)
+    ]
+    with app.app_context():
+        user = User.query.filter_by(username=body["username"]).one()
+        assert Lockout.query.filter_by(user_id=user.id).count() == 3
+
+
+def test_non_admin_cannot_run_lockout_simulation(client):
+    register(client)
+    token = login(client).get_json()["access_token"]
+
+    response = client.post(
+        "/api/admin/simulate-lockout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
 
 
 def test_audit_log_records_registration_and_login(client, app):
