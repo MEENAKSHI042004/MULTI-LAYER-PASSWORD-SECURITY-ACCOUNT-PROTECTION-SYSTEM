@@ -56,6 +56,20 @@ def create_webauthn_challenge_token(user_id: int, challenge: bytes) -> str:
     return token
 
 
+def create_webauthn_login_challenge_token(user_id: int, challenge: bytes) -> str:
+    """Bind an authentication challenge to its user for five minutes."""
+    challenge_b64 = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+    token, _jti = _encode(
+        {
+            "sub": user_id,
+            "purpose": "webauthn_login",
+            "challenge": challenge_b64,
+        },
+        timedelta(minutes=5),
+    )
+    return token
+
+
 def create_access_token(user_id: int) -> tuple[str, str]:
     """Returns (token, jti). Callers that need to record a session (login,
     verify_mfa) use the jti; callers that just need the token can ignore it."""
