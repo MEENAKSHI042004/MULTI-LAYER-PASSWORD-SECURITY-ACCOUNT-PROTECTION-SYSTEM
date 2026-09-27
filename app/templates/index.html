@@ -95,6 +95,10 @@
   .qr-box{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;}
   .qr-box img{background:#fff;padding:8px;border-radius:6px;}
   .secret{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all;}
+  .security-key-list{margin-top:16px;border-top:1px solid var(--line);}
+  .security-key-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .security-key-name{font-size:13px;font-weight:600;}
+  .security-key-date{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;}
 
   .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;}
@@ -211,6 +215,12 @@
         <input type="text" id="mfa-confirm-code">
         <button class="btn" onclick="doMfaConfirm()">Enable MFA</button>
         <div id="recovery-area"></div>
+      </div>
+      <div class="card">
+        <h2>Security Keys / Passwordless Login</h2>
+        <div class="msg" id="webauthn-msg"></div>
+        <button class="btn secondary" onclick="doAddSecurityKey()">Add Security Key</button>
+        <div class="security-key-list" id="webauthn-credentials"></div>
       </div>
     </section>
 

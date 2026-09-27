@@ -231,3 +231,46 @@ def test_webauthn_login_complete_rejects_replayed_counter(client, app, monkeypat
         assert Session.query.count() == 0
         attempt = LoginAttempt.query.filter_by(stage="webauthn", success=False).one()
         assert attempt.reason == "replayed_assertion"
+
+
+def test_webauthn_credentials_list_and_remove_are_scoped_to_current_user(client, app):
+    headers = _authenticated_headers(client)
+    register(client, username="bob", email="bob@example.com")
+    with app.app_context():
+        alice = User.query.filter_by(username="alice").first()
+        bob = User.query.filter_by(username="bob").first()
+        alice_credential = WebAuthnCredential(
+            user_id=alice.id,
+            credential_id=_b64url(b"alice-key"),
+            public_key=b"alice-public-key",
+            sign_count=0,
+            device_name="Alice key",
+        )
+        bob_credential = WebAuthnCredential(
+            user_id=bob.id,
+            credential_id=_b64url(b"bob-key"),
+            public_key=b"bob-public-key",
+            sign_count=0,
+            device_name="Bob key",
+        )
+        db.session.add_all([alice_credential, bob_credential])
+        db.session.commit()
+        alice_credential_id = alice_credential.id
+        bob_credential_id = bob_credential.id
+
+    listed = client.get("/api/auth/webauthn/credentials", headers=headers)
+    assert listed.status_code == 200
+    assert [item["device_name"] for item in listed.get_json()["credentials"]] == ["Alice key"]
+
+    forbidden = client.delete(
+        f"/api/auth/webauthn/credentials/{bob_credential_id}", headers=headers
+    )
+    assert forbidden.status_code == 404
+    removed = client.delete(
+        f"/api/auth/webauthn/credentials/{alice_credential_id}", headers=headers
+    )
+    assert removed.status_code == 200
+    assert removed.get_json()["message"] == "Security key removed."
+    with app.app_context():
+        assert WebAuthnCredential.query.count() == 1
+        assert AuditLog.query.filter_by(event_type="webauthn_credential_removed").count() == 1

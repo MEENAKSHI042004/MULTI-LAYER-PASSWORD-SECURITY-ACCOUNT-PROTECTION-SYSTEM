@@ -16,6 +16,8 @@
       </div>
       <button type="submit" class="btn btn-accent btn-block" id="login-submit">Log in</button>
     </form>
+    <button type="button" class="btn btn-block" id="security-key-login">Sign in with security key / Touch ID</button>
+    <p id="security-key-unavailable" class="form-foot" hidden>This browser doesn't support security keys.</p>
     <p class="form-foot">New here? <a href="/register">Create an account</a></p>
   </div>
 </div>
@@ -37,6 +39,25 @@
     return next && next.startsWith("/") ? next : "/account";
   }
 
+  function finishLogin(data) {
+    MLPSAPS.setSession(data.access_token, data.user);
+    window.location.href = nextUrl();
+  }
+
+  function base64urlToArrayBuffer(value){
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='));
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    return bytes.buffer;
+  }
+
+  function arrayBufferToBase64url(buffer){
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     notice.innerHTML = "";
@@ -54,7 +75,7 @@
     submitBtn.textContent = "Log in";
 
     if (result.ok && result.data && result.data.access_token) {
-      window.location.href = nextUrl();
+      finishLogin(result.data);
       return;
     }
 
@@ -72,6 +93,81 @@
     }
 
     showNotice("error", (result.data && result.data.error) || "Login failed.");
+  });
+
+  const securityKeyButton = document.getElementById("security-key-login");
+  const securityKeyUnavailable = document.getElementById("security-key-unavailable");
+
+  if (!navigator.credentials || !navigator.credentials.get) {
+    securityKeyButton.hidden = true;
+    securityKeyUnavailable.hidden = false;
+  }
+
+  securityKeyButton.addEventListener("click", async () => {
+    notice.innerHTML = "";
+    const usernameInput = document.getElementById("username");
+    let username = usernameInput.value.trim();
+    if (!username) {
+      username = (prompt("Enter your username to continue with your security key:") || "").trim();
+      if (!username) {
+        showNotice("error", "Enter your username to sign in with a security key.");
+        return;
+      }
+      usernameInput.value = username;
+    }
+
+    securityKeyButton.disabled = true;
+    securityKeyButton.textContent = "Waiting for security key...";
+    try {
+      const begin = await MLPSAPS.call("/api/auth/webauthn/login/begin", {
+        method: "POST",
+        body: { username },
+        auth: false,
+      });
+      if (!begin.ok || !begin.data) {
+        showNotice("error", (begin.data && begin.data.error) || "Could not start security key sign in.");
+        return;
+      }
+
+      const options = begin.data.options;
+      options.challenge = base64urlToArrayBuffer(options.challenge);
+      (options.allowCredentials || []).forEach(credential => {
+        credential.id = base64urlToArrayBuffer(credential.id);
+      });
+
+      const credential = await navigator.credentials.get({ publicKey: options });
+      const response = await MLPSAPS.call("/api/auth/webauthn/login/complete", {
+        method: "POST",
+        body: {
+          challenge_token: begin.data.challenge_token,
+          credential: {
+            id: credential.id,
+            rawId: arrayBufferToBase64url(credential.rawId),
+            type: credential.type,
+            response: {
+              clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+              authenticatorData: arrayBufferToBase64url(credential.response.authenticatorData),
+              signature: arrayBufferToBase64url(credential.response.signature),
+              userHandle: credential.response.userHandle
+                ? arrayBufferToBase64url(credential.response.userHandle)
+                : null,
+            },
+          },
+        },
+        auth: false,
+      });
+
+      if (response.ok && response.data && response.data.access_token) {
+        finishLogin(response.data);
+        return;
+      }
+      showNotice("error", (response.data && response.data.error) || "Security key sign in failed.");
+    } catch (error) {
+      showNotice("error", error.message || "Security key sign in failed.");
+    } finally {
+      securityKeyButton.disabled = false;
+      securityKeyButton.textContent = "Sign in with security key / Touch ID";
+    }
   });
 </script>
 {% endblock %}

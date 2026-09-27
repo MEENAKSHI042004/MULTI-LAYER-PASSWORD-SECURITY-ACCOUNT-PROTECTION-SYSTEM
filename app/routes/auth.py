@@ -15,6 +15,8 @@ Authentication REST endpoints.
   POST /api/auth/sessions/<id>/revoke - end a specific session
     POST /api/auth/webauthn/register/begin - begin security key registration
     POST /api/auth/webauthn/register/complete - verify security key registration
+    GET  /api/auth/webauthn/credentials - list registered security keys
+    DELETE /api/auth/webauthn/credentials/<id> - remove a registered security key
     POST /api/auth/webauthn/login/begin - begin security key login
     POST /api/auth/webauthn/login/complete - verify security key login
 """
@@ -347,6 +349,30 @@ def webauthn_register_complete():
         "message": "Security key registered.",
         "credential": credential_row.to_dict(),
     }), 200
+
+
+@auth_bp.route("/webauthn/credentials", methods=["GET"])
+@token_required(purpose="access")
+def list_webauthn_credentials():
+    credentials = WebAuthnCredential.query.filter_by(user_id=g.current_user.id).all()
+    return jsonify({"credentials": [credential.to_dict() for credential in credentials]}), 200
+
+
+@auth_bp.route("/webauthn/credentials/<int:credential_id>", methods=["DELETE"])
+@token_required(purpose="access")
+def remove_webauthn_credential(credential_id):
+    user = g.current_user
+    credential = WebAuthnCredential.query.filter_by(
+        id=credential_id,
+        user_id=user.id,
+    ).first()
+    if not credential:
+        return jsonify({"error": "Security key not found."}), 404
+
+    db.session.delete(credential)
+    db.session.commit()
+    log_event("webauthn_credential_removed", ip_address=_client_ip(), user_id=user.id)
+    return jsonify({"message": "Security key removed."}), 200
 
 
 @auth_bp.route("/webauthn/login/begin", methods=["POST"])
