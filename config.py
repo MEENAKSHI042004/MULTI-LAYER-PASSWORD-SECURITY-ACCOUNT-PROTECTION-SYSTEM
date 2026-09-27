@@ -27,6 +27,11 @@ class Config:
     JWT_ACCESS_TOKEN_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_MINUTES", 15))
     JWT_REFRESH_TOKEN_DAYS = int(os.environ.get("JWT_REFRESH_TOKEN_DAYS", 7))
 
+    # --- WebAuthn ---
+    WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
+    WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "MLPSAPS")
+    WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5000")
+
     # --- Password hashing (bcrypt) ---
     # 12 rounds is the widely recommended minimum work factor for bcrypt as of 2026.
     BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", 12))

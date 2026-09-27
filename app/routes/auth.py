@@ -13,14 +13,29 @@ Authentication REST endpoints.
   GET  /api/auth/me              - current session info
   GET  /api/auth/sessions        - list this user's active sessions
   POST /api/auth/sessions/<id>/revoke - end a specific session
+    POST /api/auth/webauthn/register/begin - begin security key registration
+    POST /api/auth/webauthn/register/complete - verify security key registration
 """
 
+import base64
+import json
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, request, jsonify, g, current_app
+from webauthn import (
+        base64url_to_bytes,
+        generate_registration_options,
+        options_to_json,
+        verify_registration_response,
+)
+from webauthn.helpers.structs import (
+        AuthenticatorAttestationResponse,
+        PublicKeyCredentialDescriptor,
+        RegistrationCredential,
+)
 
 from app.extensions import db, limiter
-from app.models import User, PasswordHistory, RevokedToken, Session
+from app.models import User, PasswordHistory, RevokedToken, Session, WebAuthnCredential
 from app.security.hashing import hash_password, verify_password
 from app.security.password_validator import validate_password_strength, is_password_expired
 from app.security.brute_force import (
@@ -41,6 +56,7 @@ from app.security.jwt_utils import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    create_webauthn_challenge_token,
 )
 from app.security.audit_logger import log_event
 from app.security.decorators import token_required
@@ -223,6 +239,91 @@ def mfa_confirm():
         "message": "MFA enabled.",
         "recovery_codes": codes,
         "note": "Store these recovery codes safely -- they will not be shown again.",
+    }), 200
+
+
+@auth_bp.route("/webauthn/register/begin", methods=["POST"])
+@token_required(purpose="access")
+def webauthn_register_begin():
+    user = g.current_user
+    credentials = WebAuthnCredential.query.filter_by(user_id=user.id).all()
+    options = generate_registration_options(
+        rp_id=current_app.config["WEBAUTHN_RP_ID"],
+        rp_name=current_app.config["WEBAUTHN_RP_NAME"],
+        user_id=str(user.id).encode("utf-8"),
+        user_name=user.username,
+        exclude_credentials=[
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(credential.credential_id))
+            for credential in credentials
+        ],
+    )
+    challenge_token = create_webauthn_challenge_token(user.id, options.challenge)
+    return jsonify({
+        "options": json.loads(options_to_json(options)),
+        "challenge_token": challenge_token,
+    }), 200
+
+
+@auth_bp.route("/webauthn/register/complete", methods=["POST"])
+@token_required(purpose="access")
+def webauthn_register_complete():
+    user = g.current_user
+    data = request.get_json(silent=True) or {}
+
+    try:
+        challenge_payload = decode_token(data.get("challenge_token") or "")
+        if (
+            challenge_payload.get("purpose") != "webauthn_registration"
+            or challenge_payload.get("sub") != user.id
+        ):
+            raise ValueError("Challenge token does not belong to this user.")
+
+        credential_data = data.get("credential")
+        if not isinstance(credential_data, dict):
+            raise ValueError("Credential response is missing.")
+        response_data = credential_data["response"]
+        credential = RegistrationCredential(
+            id=credential_data["id"],
+            raw_id=base64url_to_bytes(credential_data["rawId"]),
+            response=AuthenticatorAttestationResponse(
+                client_data_json=base64url_to_bytes(response_data["clientDataJSON"]),
+                attestation_object=base64url_to_bytes(response_data["attestationObject"]),
+            ),
+        )
+        verification = verify_registration_response(
+            credential=credential,
+            expected_challenge=base64url_to_bytes(challenge_payload["challenge"]),
+            expected_rp_id=current_app.config["WEBAUTHN_RP_ID"],
+            expected_origin=current_app.config["WEBAUTHN_ORIGIN"],
+        )
+    except Exception:
+        db.session.rollback()
+        log_event("webauthn_registration_failed", ip_address=_client_ip(), user_id=user.id)
+        return jsonify({"error": "Invalid WebAuthn registration response or challenge token."}), 400
+
+    device_name = data.get("device_name")
+    if device_name is not None:
+        if not isinstance(device_name, str):
+            log_event("webauthn_registration_failed", ip_address=_client_ip(), user_id=user.id)
+            return jsonify({"error": "device_name must be a string."}), 400
+        device_name = device_name.strip() or None
+
+    credential_row = WebAuthnCredential(
+        user_id=user.id,
+        credential_id=base64.urlsafe_b64encode(verification.credential_id)
+        .rstrip(b"=")
+        .decode("ascii"),
+        public_key=bytes(verification.credential_public_key),
+        sign_count=verification.sign_count,
+        device_name=device_name,
+    )
+    db.session.add(credential_row)
+    db.session.commit()
+
+    log_event("webauthn_credential_registered", ip_address=_client_ip(), user_id=user.id)
+    return jsonify({
+        "message": "Security key registered.",
+        "credential": credential_row.to_dict(),
     }), 200
 
 
