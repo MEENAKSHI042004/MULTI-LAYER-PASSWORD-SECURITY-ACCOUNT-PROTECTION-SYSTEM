@@ -74,12 +74,29 @@ verification or scripting."
 **Do:** Run `python cli_demo.py register`, then `python cli_demo.py
 simulate-lockout`, narrating the escalating lockout output.
 
-### 10. Close with the architecture diagram
+### 10. Show the demo storefront as a second client
+**Say:** "Everything so far has been MLPSAPS's own dashboard. To prove
+this actually works as a real authentication provider — not just for
+itself — we've built a separate demo storefront with no login logic of
+its own. It calls MLPSAPS's API directly for every account action."
+**Do:** Open the storefront site in a new tab, log in with the same
+account using the password form, then show the "Sign in with security
+key" option authenticating through the same MLPSAPS WebAuthn endpoints.
+Point out that revoking the session from the MLPSAPS admin dashboard
+immediately locks the storefront out too, since they share one backend.
+**Fallback:** if live login fails, show the storefront's `login.html` and
+the browser's network tab calling `/api/auth/login` and
+`/api/auth/webauthn/login/*` directly, to demonstrate the same API is
+being used.
+
+### 11. Close with the architecture diagram
 **Say:** "To tie it together, here's how a request actually flows through
 the system."
 **Do:** Show `docs/architecture-diagram.svg` — walk through registration →
-hashing → login → lockout check → policy check → MFA → session issuance,
-with the audit logger running alongside every stage.
+hashing → login → lockout check → policy check → MFA/WebAuthn → session
+issuance, with the audit logger running alongside every stage, and point
+out the demo storefront as a second client feeding into the same login
+flow.
 
 ---
 

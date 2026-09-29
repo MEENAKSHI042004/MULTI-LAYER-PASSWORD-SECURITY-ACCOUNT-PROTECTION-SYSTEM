@@ -6,34 +6,40 @@ was, so you can defend every choice to your project guide and reviewer.
 
 ---
 
-## 1. Password Hashing — bcrypt
+## 1. Password Hashing — Argon2id (migrated from bcrypt)
 
-**Choice:** bcrypt (via the `bcrypt` library), work factor 12 rounds by default.
+**Choice:** Argon2id (via the `argon2-cffi` library) is now the default for
+all new password hashes. Existing accounts created before this migration
+still have bcrypt hashes; `verify_password()` detects which algorithm a
+stored hash uses and verifies against the correct one, so no account was
+invalidated by the switch.
 
-**Why bcrypt over plain SHA-256/MD5:** generic hash functions are designed to
-be *fast*, which is exactly the wrong property for password storage — it lets
-an attacker with a leaked hash try billions of guesses per second on a GPU.
-bcrypt is deliberately slow and its cost factor is tunable, so as hardware
-gets faster you raise the round count to keep cracking expensive.
+**Why Argon2id over plain SHA-256/MD5:** generic hash functions are designed
+to be *fast*, which is exactly the wrong property for password storage — it
+lets an attacker with a leaked hash try billions of guesses per second on a
+GPU. Argon2id is deliberately slow and memory-hard, and its cost parameters
+are tunable, so as hardware gets faster you raise the cost to keep cracking
+expensive.
 
-**Why bcrypt over argon2 here:** argon2 (specifically argon2id) is the more
-modern, memory-hard recommendation and is a perfectly valid alternative — the
-codebase isolates all hashing behind `app/security/hashing.py`, so swapping
-the implementation later is a one-file change. bcrypt was chosen as the
-default for this build because it has no external C-library dependency
-headaches in constrained/offline lab environments and is still considered
-cryptographically sound.
+**Why Argon2id specifically (over bcrypt or scrypt):** Argon2id is the
+current OWASP-recommended default and the winner of the Password Hashing
+Competition. Its memory-hardness makes GPU/ASIC-based cracking
+significantly more expensive than bcrypt, which uses comparatively little
+memory and is more amenable to parallelized cracking hardware. The codebase
+isolates all hashing behind `app/security/hashing.py`, so this migration
+was a contained, single-module change.
 
-**Why per-password random salts matter:** bcrypt generates a fresh random
-salt per call and embeds it in the output hash string. This means two users
-with the identical password get *different* stored hashes, defeating
-precomputed rainbow-table attacks.
+**Why per-password random salts matter:** both bcrypt and Argon2id generate
+a fresh random salt per call and embed it in the output hash string. This
+means two users with the identical password get *different* stored hashes,
+defeating precomputed rainbow-table attacks.
 
-**Rounds = 12:** each increment doubles the compute cost. 12 rounds takes
-roughly 200–300ms per hash on typical hardware — negligible for a real login,
-but expensive enough to make offline brute-forcing a leaked database
-impractical at scale. (Tests use `BCRYPT_ROUNDS = 4` purely for speed; never
-use that value outside the test suite.)
+**Migration approach — dual verification, not a forced reset:** rather than
+invalidating every existing account, `verify_password()` inspects the
+stored hash's format to determine whether it's a legacy bcrypt hash or a
+new Argon2id hash, and verifies accordingly. This means existing users are
+never locked out by the migration; new hashes (new registrations, and any
+password change) are always written as Argon2id going forward.
 
 ---
 
@@ -174,6 +180,40 @@ should not hand out usable backup codes. Each code is single-use
 
 ---
 
+## 4a. Passwordless Authentication — WebAuthn (FIDO2)
+
+**Why add this alongside TOTP:** TOTP still requires typing a password
+first; WebAuthn removes the password step entirely for accounts that
+enroll a security key or platform authenticator (Windows Hello, Touch ID).
+This is framed as an extension of the MFA chapter rather than a
+replacement — users can still fall back to password + TOTP.
+
+**How registration/login work:** implemented via the `webauthn` library.
+Registration (`/api/auth/webauthn/register/begin` and `/complete`) and
+login (`/api/auth/webauthn/login/begin` and `/complete`) both use a
+short-lived, single-purpose JWT to bind the server-issued challenge to the
+requesting user, following the same pattern as the existing `pre_mfa`
+token.
+
+**Replay protection:** each authenticator tracks a `sign_count` that must
+strictly increase on every use; a login attempt with a non-increasing
+counter is rejected and logged the same way a bad password attempt is.
+
+**Cross-origin support:** the demo storefront (a separate site on its own
+origin) also offers WebAuthn login against the same MLPSAPS backend.
+`WEBAUTHN_ORIGIN` is an allowlist of the specific origins permitted to
+complete a ceremony (the MLPSAPS dashboard and the storefront) rather than
+a single origin or a wildcard, since WebAuthn's origin check exists
+specifically to prevent phishing sites from replaying a ceremony.
+
+**Manually verified:** tested end-to-end via Chromium's built-in virtual
+authenticator, confirming registration, login, and replay rejection all
+behave correctly, including the cross-origin case (enrolled on the
+dashboard, signed in from the storefront). Not yet tested against physical
+hardware (a real security key or platform biometric sensor).
+
+---
+
 ## 5. JWT Session Management
 
 **Why JWT over server-side sessions:** JWTs are stateless and self-verifying
@@ -261,6 +301,9 @@ call away from being proven.
 - The email-OTP alternative mentioned in early planning was intentionally
   narrowed to TOTP-only for this build, since TOTP doesn't depend on a
   working SMTP relay for the demo to function offline.
+- WebAuthn has been verified against Chromium's virtual authenticator but
+  not yet against real physical hardware (a USB security key or a
+  platform biometric sensor like Touch ID/Windows Hello).
 
 ---
 
