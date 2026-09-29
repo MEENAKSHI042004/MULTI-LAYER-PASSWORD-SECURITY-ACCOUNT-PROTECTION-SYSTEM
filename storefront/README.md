@@ -43,3 +43,13 @@ opts in via CORS. MLPSAPS's `CORS_ALLOWED_ORIGINS` config (see `config.py`
 in the repo root) allowlists this storefront's origin specifically -- it is
 **not** wildcarded, since an auth API with open CORS would let any site on
 the internet read a logged-in user's session data.
+
+## Passwordless login (WebAuthn) -- run it on `localhost`, not `127.0.0.1`
+
+WebAuthn credentials are bound to an RP ID (`localhost`) and the page origin.
+Open the storefront as **http://localhost:5001** -- on `127.0.0.1` the browser
+refuses the security-key prompt because the RP ID doesn't match. MLPSAPS
+accepts assertions from both `http://localhost:5000` (dashboard) and
+`http://localhost:5001` (storefront) via `WEBAUTHN_ORIGIN` in `config.py`
+(comma-separated env var to override). A key enrolled on the MLPSAPS
+dashboard works on the storefront.

@@ -30,7 +30,19 @@ class Config:
     # --- WebAuthn ---
     WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
     WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "MLPSAPS")
-    WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5000")
+    # Browsers stamp the *page's* origin into every WebAuthn assertion, so a
+    # key used on the storefront (port 5001) carries a different origin than
+    # one used on the MLPSAPS dashboard (port 5000). Accept both -- and only
+    # those. RP ID stays "localhost" (ports aren't part of the RP ID), which
+    # also means the storefront must be opened as http://localhost:5001, not
+    # 127.0.0.1, or the browser refuses the ceremony.
+    WEBAUTHN_ORIGIN = [
+        o.strip()
+        for o in os.environ.get(
+            "WEBAUTHN_ORIGIN", "http://localhost:5000,http://localhost:5001"
+        ).split(",")
+        if o.strip()
+    ]
 
     # --- Password hashing (bcrypt) ---
     # 12 rounds is the widely recommended minimum work factor for bcrypt as of 2026.
