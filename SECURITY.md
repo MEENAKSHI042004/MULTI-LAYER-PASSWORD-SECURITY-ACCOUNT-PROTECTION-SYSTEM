@@ -199,10 +199,18 @@ token.
 strictly increase on every use; a login attempt with a non-increasing
 counter is rejected and logged the same way a bad password attempt is.
 
+**Cross-origin support:** the demo storefront (a separate site on its own
+origin) also offers WebAuthn login against the same MLPSAPS backend.
+`WEBAUTHN_ORIGIN` is an allowlist of the specific origins permitted to
+complete a ceremony (the MLPSAPS dashboard and the storefront) rather than
+a single origin or a wildcard, since WebAuthn's origin check exists
+specifically to prevent phishing sites from replaying a ceremony.
+
 **Manually verified:** tested end-to-end via Chromium's built-in virtual
 authenticator, confirming registration, login, and replay rejection all
-behave correctly. Not yet tested against physical hardware (a real
-security key or platform biometric sensor).
+behave correctly, including the cross-origin case (enrolled on the
+dashboard, signed in from the storefront). Not yet tested against physical
+hardware (a real security key or platform biometric sensor).
 
 ---
 
@@ -250,7 +258,7 @@ per minute, 3 registrations per minute, 100 general requests per hour by
 default (`config.py`).
 
 **Per-username limiting, in addition to per-IP:** the login endpoint also
-throttles by the *username in the request body* (10 attempts/minute),
+throttles by the *username in the request body* (5 attempts/minute),
 independent of the per-IP limit above. Per-IP limiting alone can be dodged
 by spreading attempts for one target account across many IP addresses
 (botnets, rotating proxies); tying a second limit to the account itself
@@ -311,3 +319,97 @@ worker independently imports the Flask app, and `create_app()` calls
 SQLite's whole-file locking effectively serializes concurrent writers, so
 the race was invisible. Against Postgres, both workers raced to create the
 same tables at nearly the same instant, and the loser crashed with:
+
+```
+psycopg2.errors.UniqueViolation: duplicate key value violates unique
+constraint "pg_class_relname_nsp_index"
+```
+
+Gunicorn's supervisor restarted the crashed worker automatically, so the
+app appeared to recover on its own — but this was fragile, timing-dependent
+luck rather than correct behavior, and would resurface unpredictably on any
+fresh deployment.
+
+**The fix:** table creation was moved out of the app-boot path shared by
+every worker and into a dedicated `entrypoint.sh` script that runs once, in
+a single process, before Gunicorn starts and forks any workers:
+
+```sh
+#!/bin/sh
+set -e
+python -c "from app import create_app; from app.extensions import db; app = create_app(); app.app_context().push(); db.create_all()"
+exec gunicorn --bind 0.0.0.0:5000 --workers 2 run:app
+```
+
+`db.create_all()` is naturally idempotent (it only creates tables that
+don't already exist), so this is safe to run on every container restart. By
+the time Gunicorn's workers boot and each one calls `create_app()` again
+individually, the tables already exist, so those calls become harmless
+no-ops instead of racing each other.
+
+**Why this matters beyond just fixing the crash:** this is a concrete,
+reproducible example of a bug class that only surfaces under a
+production-shaped database, reinforcing why "the config supports Postgres"
+is not the same claim as "Postgres works end-to-end" — the latter needs to
+actually be run and tested, not just assumed from SQLAlchemy's
+database-agnostic API.
+
+**Verified:** registration was tested directly against the running
+Postgres container (bypassing the API layer to rule out any other
+variable) and confirmed via `psql` that rows persist correctly with
+sequential IDs and no data loss across repeated registrations.
+
+---
+
+## 10. Finding: Per-Username Rate Limiting Interacts With Account Lockout (Fixed)
+
+**What was tested:** a credential-stuffing simulation against a single
+test account, using a curated list of ~50 of the most common breached
+passwords, to measure how many attempts an attacker gets before the
+account is locked.
+
+**What was observed:** the account was not locked after the expected
+5 failed attempts (`MAX_FAILED_ATTEMPTS = 5`). Instead, it took 16
+attempts across several separate 1-minute windows before a lockout
+finally triggered.
+
+**Root cause:** the newly added per-username rate limiter
+(`RATELIMIT_LOGIN_PER_USERNAME`) is configured at exactly "5 per
+minute" — the same threshold as `MAX_FAILED_ATTEMPTS`. Because the rate
+limiter runs first (as a route decorator, before the request body is
+even processed), it blocks the 6th request with a `429` before the
+lockout logic ever sees a 5th recorded failure in the database. The
+account is never actually locked in that window; it's simply
+rate-limited into silence. Only across multiple separate 1-minute
+windows does the recorded failure count in the database eventually
+exceed 5, at which point the lockout logic (which has no time-window
+expiry — see §2) finally fires.
+
+**Why this matters:** the two defenses were intended to reinforce each
+other, but as configured they compete for the same budget of requests.
+An attacker distributing a credential-stuffing attempt across multiple
+minutes (rather than sending 50 requests instantly) effectively gets
+extra "free" guesses per minute that never count toward the lockout
+threshold in that window, meaningfully delaying when the account
+actually locks.
+
+**Recommended fix:** set `RATELIMIT_LOGIN_PER_USERNAME` higher than
+`MAX_FAILED_ATTEMPTS` (e.g. 8–10 per minute) so the lockout has room to
+fire on genuine password failures, while the rate limiter remains a
+backstop against very high-volume or distributed attempts rather than
+competing with the lockout for the same 5 requests.
+
+**Verified:** confirmed via an isolated, deliberately paced test (one
+request every 2 seconds, well under 1 per minute) — the rate limiter
+still returned `429` on the 6th request, proving the interaction is
+independent of request timing/burstiness and is a genuine threshold
+overlap, not a timing artifact.
+
+**Fix applied:** `RATELIMIT_LOGIN_PER_USERNAME` raised from "5 per
+minute" to "10 per minute" in `config.py`, keeping it above
+`MAX_FAILED_ATTEMPTS` so the rate limiter no longer intercepts the
+request that would register the 5th failure. Re-verified against a
+fresh test account: attempts 1–5 return `401 Invalid username or
+password`, and the very next attempt returns `423 Account temporarily
+locked` — lockout now fires at the intended 5th failure, in a single
+window, with no rate-limit interference.
