@@ -7,6 +7,7 @@ document.querySelectorAll('.nav button').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'mfa') loadWebAuthnCredentials();
     if (btn.dataset.view === 'account') loadMe();
     if (btn.dataset.view === 'dashboard') loadDashboard();
   });
@@ -147,6 +148,128 @@ async function doMfaConfirm(){
     '<div class="recovery-codes">' + data.recovery_codes.map(c => '<div>' + c + '</div>').join('') + '</div>';
 }
 
+function base64urlToArrayBuffer(value){
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='));
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  return bytes.buffer;
+}
+
+function arrayBufferToBase64url(buffer){
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function loadWebAuthnCredentials(){
+  const list = document.getElementById('webauthn-credentials');
+  list.replaceChildren();
+  hideMsg('webauthn-msg');
+  if (!state.accessToken) {
+    showMsg('webauthn-msg', 'Log in first.', 'info');
+    return false;
+  }
+
+  const { ok, data } = await api('/api/auth/webauthn/credentials', { auth:'access' });
+  if (!ok) {
+    showMsg('webauthn-msg', data.error || 'Could not load security keys.', 'error');
+    return false;
+  }
+
+  const credentials = data.credentials || [];
+  if (!credentials.length) {
+    list.textContent = 'No security keys registered.';
+    list.className = 'security-key-list hint';
+    return true;
+  }
+
+  list.className = 'security-key-list';
+  credentials.forEach(credential => {
+    const row = document.createElement('div');
+    row.className = 'security-key-row';
+    const details = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'security-key-name';
+    name.textContent = credential.device_name || 'Unnamed security key';
+    const created = document.createElement('div');
+    created.className = 'security-key-date';
+    created.textContent = 'Added ' + fmtTime(credential.created_at);
+    details.append(name, created);
+    const remove = document.createElement('button');
+    remove.className = 'btn secondary';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => removeSecurityKey(credential.id));
+    row.append(details, remove);
+    list.appendChild(row);
+  });
+  return true;
+}
+
+async function doAddSecurityKey(){
+  hideMsg('webauthn-msg');
+  if (!state.accessToken) { showMsg('webauthn-msg', 'Log in first.', 'error'); return; }
+  if (!navigator.credentials || !navigator.credentials.create) {
+    showMsg('webauthn-msg', 'This browser does not support security keys.', 'error');
+    return;
+  }
+  const deviceName = prompt('Name this security key (optional):', 'Security key');
+  if (deviceName === null) return;
+
+  try {
+    const begin = await api('/api/auth/webauthn/register/begin', { method:'POST', auth:'access' });
+    if (!begin.ok) { showMsg('webauthn-msg', begin.data.error || 'Could not start security key registration.', 'error'); return; }
+    const options = begin.data.options;
+    options.challenge = base64urlToArrayBuffer(options.challenge);
+    options.user.id = base64urlToArrayBuffer(options.user.id);
+    (options.excludeCredentials || []).forEach(credential => {
+      credential.id = base64urlToArrayBuffer(credential.id);
+    });
+
+    const credential = await navigator.credentials.create({ publicKey: options });
+    const complete = await api('/api/auth/webauthn/register/complete', {
+      method:'POST',
+      auth:'access',
+      body: JSON.stringify({
+        challenge_token: begin.data.challenge_token,
+        device_name: deviceName.trim() || null,
+        credential: {
+          id: credential.id,
+          rawId: arrayBufferToBase64url(credential.rawId),
+          type: credential.type,
+          response: {
+            clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+            attestationObject: arrayBufferToBase64url(credential.response.attestationObject),
+          },
+        },
+      }),
+    });
+    if (!complete.ok) { showMsg('webauthn-msg', complete.data.error || 'Security key registration failed.', 'error'); return; }
+    const refreshed = await loadWebAuthnCredentials();
+    showMsg(
+      'webauthn-msg',
+      refreshed ? complete.data.message || 'Security key registered.' : 'Security key registered, but the list could not be refreshed.',
+      refreshed ? 'ok' : 'info',
+    );
+  } catch (error) {
+    showMsg('webauthn-msg', error.message || 'Security key registration failed.', 'error');
+  }
+}
+
+async function removeSecurityKey(credentialId){
+  if (!confirm('Remove this security key from your account?')) return;
+  const { ok, data } = await api('/api/auth/webauthn/credentials/' + credentialId, {
+    method:'DELETE', auth:'access'
+  });
+  if (!ok) { showMsg('webauthn-msg', data.error || 'Could not remove security key.', 'error'); return; }
+  const refreshed = await loadWebAuthnCredentials();
+  showMsg(
+    'webauthn-msg',
+    refreshed ? data.message || 'Security key removed.' : 'Security key removed, but the list could not be refreshed.',
+    refreshed ? 'ok' : 'info',
+  );
+}
+
 async function loadMe(){
   hideMsg('account-msg');
   if (!state.accessToken) { showMsg('account-msg', 'Log in first.', 'info'); document.getElementById('me-json').textContent = '—'; return; }
@@ -219,6 +342,39 @@ async function loadDashboard(){
     (l.active ? '<button class="btn secondary btn-xs" onclick="doUnlock(' + l.user_id + ')">Unlock</button>' : '—') +
     '</td></tr>'
   ).join('');
+}
+
+async function runAttackSimulation(){
+  hideMsg('simulation-msg');
+  const button = document.getElementById('simulate-lockout-btn');
+  const log = document.getElementById('simulation-log');
+  if (!state.accessToken) { showMsg('simulation-msg', 'Log in as an admin account to run the simulation.', 'info'); return; }
+
+  button.disabled = true;
+  button.textContent = 'Running simulation...';
+  log.textContent = 'Starting attack simulation...';
+  log.scrollTop = log.scrollHeight;
+  try {
+    const { ok, data } = await api('/api/admin/simulate-lockout', { method:'POST', auth:'access' });
+    if (!ok) {
+      showMsg('simulation-msg', data.error || 'Could not run the attack simulation.', 'error');
+      return;
+    }
+
+    log.textContent = '';
+    for (const event of data.events || []) {
+      log.textContent += (log.textContent ? '\n' : '') + event.message;
+      log.scrollTop = log.scrollHeight;
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+    await loadDashboard();
+    showMsg('simulation-msg', data.message || 'Attack simulation completed.', 'ok');
+  } catch (error) {
+    showMsg('simulation-msg', error.message || 'Could not run the attack simulation.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Run Attack Simulation';
+  }
 }
 
 async function doUnlock(userId){

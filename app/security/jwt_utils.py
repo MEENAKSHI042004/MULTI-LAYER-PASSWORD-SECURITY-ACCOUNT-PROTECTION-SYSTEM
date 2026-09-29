@@ -13,6 +13,7 @@ an otherwise-stateless JWT: revoking a token means recording its jti as
 revoked, and every verification checks the jti against that record.
 """
 
+import base64
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +39,34 @@ def create_pre_mfa_token(user_id: int) -> str:
     to access protected resources -- only the /verify-mfa endpoint accepts it."""
     minutes = 5  # short-lived: must complete MFA quickly
     token, _jti = _encode({"sub": user_id, "purpose": "pre_mfa"}, timedelta(minutes=minutes))
+    return token
+
+
+def create_webauthn_challenge_token(user_id: int, challenge: bytes) -> str:
+    """Bind a registration challenge to its user for five minutes."""
+    challenge_b64 = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+    token, _jti = _encode(
+        {
+            "sub": user_id,
+            "purpose": "webauthn_registration",
+            "challenge": challenge_b64,
+        },
+        timedelta(minutes=5),
+    )
+    return token
+
+
+def create_webauthn_login_challenge_token(user_id: int, challenge: bytes) -> str:
+    """Bind an authentication challenge to its user for five minutes."""
+    challenge_b64 = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+    token, _jti = _encode(
+        {
+            "sub": user_id,
+            "purpose": "webauthn_login",
+            "challenge": challenge_b64,
+        },
+        timedelta(minutes=5),
+    )
     return token
 
 

@@ -5,6 +5,7 @@ Admin REST endpoints -- power the security dashboard.
   GET  /api/admin/login-attempts    - recent raw login attempts (all users)
   GET  /api/admin/lockouts          - active + historical lockouts
   POST /api/admin/unlock/<user_id>  - manual override to clear an active lockout
+    POST /api/admin/simulate-lockout - run the bounded lockout simulation
   GET  /api/admin/stats             - summary counters for dashboard cards
   GET  /api/admin/verify-audit-log  - recompute the tamper-evident hash chain
                                        and report whether it's intact
@@ -12,6 +13,7 @@ Admin REST endpoints -- power the security dashboard.
 
 import csv
 import io
+import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, g, Response
@@ -26,6 +28,9 @@ from app.extensions import db
 from app.models import AuditLog, LoginAttempt, Lockout, User
 from app.security.decorators import token_required, admin_required
 from app.security.audit_logger import log_event, verify_chain
+from app.security.brute_force import record_attempt, register_failure_and_maybe_lock
+from app.security.hashing import hash_password
+from app.security.lockout_simulation import run_lockout_simulation
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -193,6 +198,60 @@ def manual_unlock(user_id):
         db.session.commit()
     log_event("manual_unlock", user_id=user.id, details=f"by admin {g.current_user.username}")
     return jsonify({"message": f"User {user.username} unlocked."}), 200
+
+
+@admin_bp.route("/simulate-lockout", methods=["POST"])
+@token_required(purpose="access")
+@admin_required
+def simulate_lockout():
+    username = f"lockout_test_{uuid.uuid4().hex[:12]}"
+    user = User(
+        username=username,
+        email=f"{username}@example.invalid",
+        password_hash=hash_password(uuid.uuid4().hex),
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    def simulated_login_attempt():
+        record_attempt(
+            user,
+            username,
+            "127.0.0.1",
+            success=False,
+            stage="password",
+            reason="bad_password",
+        )
+        lockout = register_failure_and_maybe_lock(user)
+        if lockout:
+            log_event(
+                "account_locked",
+                ip_address="127.0.0.1",
+                user_id=user.id,
+                details=f"simulation lockout #{lockout.lockout_number}",
+            )
+            return 423, {"retry_after_seconds": lockout.duration_seconds}
+        return 401, {"error": "Invalid username or password."}
+
+    events, succeeded = run_lockout_simulation(user, simulated_login_attempt, rounds=3)
+    log_event(
+        "lockout_simulation_run",
+        ip_address=request.remote_addr,
+        user_id=g.current_user.id,
+        details=f"test_user={username}; succeeded={succeeded}",
+    )
+    if not succeeded:
+        return jsonify({
+            "error": "The simulation did not reach every lockout threshold.",
+            "username": username,
+            "events": events,
+        }), 500
+    return jsonify({
+        "message": "Attack simulation completed.",
+        "username": username,
+        "rounds": 3,
+        "events": events,
+    }), 200
 
 
 @admin_bp.route("/stats", methods=["GET"])

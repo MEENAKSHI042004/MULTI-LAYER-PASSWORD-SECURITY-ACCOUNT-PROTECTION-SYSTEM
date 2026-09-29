@@ -1,15 +1,13 @@
 """Terminal demo for the application's core authentication security flows."""
 
 import argparse
-from datetime import datetime, timedelta, timezone
 import sys
 
 from app import create_app
-from app.extensions import db
-from app.models import Lockout, User
+from app.models import User
 from app.routes.auth import login as auth_login
 from app.routes.auth import register as auth_register
-from app.security.brute_force import get_active_lockout
+from app.security.lockout_simulation import run_lockout_simulation
 from config import Config
 
 DEFAULT_USERNAME = "cli_demo_user"
@@ -89,47 +87,19 @@ def simulate_lockout(app, args):
         print(f"Configured threshold: {app.config['MAX_FAILED_ATTEMPTS']} failed attempts")
         print(f"Rounds to demonstrate: {args.rounds}")
 
-        for round_number in range(1, args.rounds + 1):
-            print(f"\nRound {round_number}: sending wrong-password attempts...")
-            for attempt_number in range(1, app.config["MAX_FAILED_ATTEMPTS"] + 1):
-                response = _response_from(
-                    auth_login,
-                    app,
-                    "/api/auth/login",
-                    {"username": args.username, "password": args.password},
-                )
-                data = _response_json(response)
-                print(f"  Attempt {attempt_number}: status {response.status_code}")
-
-                lockout = Lockout.query.filter_by(user_id=user.id).order_by(Lockout.locked_at.desc()).first()
-                if lockout and lockout.lockout_number >= round_number:
-                    print(
-                        f"  Account locked: lockout #{lockout.lockout_number}, "
-                        f"duration {lockout.duration_seconds} seconds."
-                    )
-                    break
-                if response.status_code == 423:
-                    print(f"  Account is already locked ({data.get('retry_after_seconds', 0)} seconds remaining).")
-                    break
-
-            lockout = Lockout.query.filter_by(user_id=user.id).order_by(Lockout.locked_at.desc()).first()
-            if not lockout or lockout.lockout_number < round_number:
-                print("  The account did not reach the lockout threshold.", file=sys.stderr)
-                return 1
-
-            if round_number < args.rounds:
-                print("  Expiring this demo lockout so the next backoff round can be shown immediately.")
-                lockout.unlock_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-                db.session.commit()
-
-        final_lockout = get_active_lockout(user)
-        if final_lockout:
-            print(
-                f"\nSimulation complete. The account remains locked for "
-                f"approximately {final_lockout.duration_seconds} seconds."
+        def attempt_login():
+            response = _response_from(
+                auth_login,
+                app,
+                "/api/auth/login",
+                {"username": args.username, "password": args.password},
             )
-        else:
-            print("\nSimulation complete. The final demo lockout has expired.")
+            return response.status_code, _response_json(response)
+
+        events, succeeded = run_lockout_simulation(user, attempt_login, args.rounds)
+        for event in events:
+            print(event["message"])
+        return 0 if succeeded else 1
     return 0
 
 

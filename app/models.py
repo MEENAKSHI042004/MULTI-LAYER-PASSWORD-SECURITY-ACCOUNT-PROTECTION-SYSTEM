@@ -53,6 +53,9 @@ class User(db.Model):
     sessions = db.relationship(
         "Session", backref="user", lazy=True, cascade="all, delete-orphan"
     )
+    webauthn_credentials = db.relationship(
+        "WebAuthnCredential", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
 
     def to_public_dict(self):
         return {
@@ -168,4 +171,23 @@ class Session(db.Model):
             "user_agent": self.user_agent,
             "created_at": self.created_at.isoformat(),
             "last_seen_at": self.last_seen_at.isoformat(),
+        }
+
+
+class WebAuthnCredential(db.Model):
+    __tablename__ = "webauthn_credentials"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    credential_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    public_key = db.Column(db.LargeBinary, nullable=False)
+    sign_count = db.Column(db.Integer, default=0, nullable=False)
+    device_name = db.Column(db.String(128), nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "device_name": self.device_name,
+            "created_at": self.created_at.isoformat(),
         }

@@ -13,7 +13,7 @@
     <rect x="220" y="100" width="150" height="70" rx="8" fill="#161B24" stroke="#232A36"/>
     <text x="295" y="125" text-anchor="middle" font-weight="600">Password</text>
     <text x="295" y="141" text-anchor="middle" font-weight="600">Hashing</text>
-    <text x="295" y="158" text-anchor="middle" fill="#7E8AA0" font-size="11">bcrypt + salt</text>
+    <text x="295" y="158" text-anchor="middle" fill="#7E8AA0" font-size="11">Argon2id (bcrypt fallback)</text>
 
     <!-- 3 Login Attempt -->
     <rect x="410" y="100" width="150" height="70" rx="8" fill="#161B24" stroke="#232A36"/>
@@ -37,6 +37,16 @@
     <text x="1075" y="125" text-anchor="middle" font-weight="600">MFA (TOTP)</text>
     <text x="1075" y="141" text-anchor="middle" font-weight="600">Verification</text>
     <text x="1075" y="158" text-anchor="middle" fill="#7E8AA0" font-size="11">pre-MFA token → full session</text>
+
+    <!-- Alternate MFA method -->
+    <rect x="945" y="178" width="125" height="38" rx="8" fill="#161B24" stroke="#232A36"/>
+    <text x="1007.5" y="194" text-anchor="middle" fill="#7E8AA0" font-size="10">or WebAuthn</text>
+    <text x="1007.5" y="207" text-anchor="middle" fill="#7E8AA0" font-size="10">(security key)</text>
+
+    <!-- Demo storefront client -->
+    <rect x="220" y="260" width="150" height="70" rx="8" fill="#161B24" stroke="#232A36"/>
+    <text x="295" y="285" text-anchor="middle" font-weight="600">Demo Storefront</text>
+    <text x="295" y="305" text-anchor="middle" fill="#7E8AA0" font-size="11">2nd client via API</text>
 
     <!-- 7 Session -->
     <rect x="600" y="260" width="150" height="70" rx="8" fill="#161B24" stroke="#4FBE8A"/>
@@ -69,6 +79,9 @@
     <line x1="940" y1="135" x2="978" y2="135"/>
   </g>
 
+  <!-- Demo storefront calls the login API -->
+  <line x1="370" y1="260" x2="438" y2="169" stroke="#7E8AA0" stroke-width="2" marker-end="url(#arrow)"/>
+
   <!-- down arrows to second row -->
   <g stroke="#7E8AA0" stroke-width="2" marker-end="url(#arrow)">
     <line x1="1075" y1="170" x2="1075" y2="220"/>
@@ -89,6 +102,7 @@
     <line x1="675" y1="330" x2="675" y2="430"/>
     <line x1="865" y1="330" x2="865" y2="430"/>
     <line x1="485" y1="330" x2="485" y2="430"/>
+    <line x1="295" y1="330" x2="295" y2="430"/>
   </g>
 
   <defs>
