@@ -6,34 +6,40 @@ was, so you can defend every choice to your project guide and reviewer.
 
 ---
 
-## 1. Password Hashing — bcrypt
+## 1. Password Hashing — Argon2id (migrated from bcrypt)
 
-**Choice:** bcrypt (via the `bcrypt` library), work factor 12 rounds by default.
+**Choice:** Argon2id (via the `argon2-cffi` library) is now the default for
+all new password hashes. Existing accounts created before this migration
+still have bcrypt hashes; `verify_password()` detects which algorithm a
+stored hash uses and verifies against the correct one, so no account was
+invalidated by the switch.
 
-**Why bcrypt over plain SHA-256/MD5:** generic hash functions are designed to
-be *fast*, which is exactly the wrong property for password storage — it lets
-an attacker with a leaked hash try billions of guesses per second on a GPU.
-bcrypt is deliberately slow and its cost factor is tunable, so as hardware
-gets faster you raise the round count to keep cracking expensive.
+**Why Argon2id over plain SHA-256/MD5:** generic hash functions are designed
+to be *fast*, which is exactly the wrong property for password storage — it
+lets an attacker with a leaked hash try billions of guesses per second on a
+GPU. Argon2id is deliberately slow and memory-hard, and its cost parameters
+are tunable, so as hardware gets faster you raise the cost to keep cracking
+expensive.
 
-**Why bcrypt over argon2 here:** argon2 (specifically argon2id) is the more
-modern, memory-hard recommendation and is a perfectly valid alternative — the
-codebase isolates all hashing behind `app/security/hashing.py`, so swapping
-the implementation later is a one-file change. bcrypt was chosen as the
-default for this build because it has no external C-library dependency
-headaches in constrained/offline lab environments and is still considered
-cryptographically sound.
+**Why Argon2id specifically (over bcrypt or scrypt):** Argon2id is the
+current OWASP-recommended default and the winner of the Password Hashing
+Competition. Its memory-hardness makes GPU/ASIC-based cracking
+significantly more expensive than bcrypt, which uses comparatively little
+memory and is more amenable to parallelized cracking hardware. The codebase
+isolates all hashing behind `app/security/hashing.py`, so this migration
+was a contained, single-module change.
 
-**Why per-password random salts matter:** bcrypt generates a fresh random
-salt per call and embeds it in the output hash string. This means two users
-with the identical password get *different* stored hashes, defeating
-precomputed rainbow-table attacks.
+**Why per-password random salts matter:** both bcrypt and Argon2id generate
+a fresh random salt per call and embed it in the output hash string. This
+means two users with the identical password get *different* stored hashes,
+defeating precomputed rainbow-table attacks.
 
-**Rounds = 12:** each increment doubles the compute cost. 12 rounds takes
-roughly 200–300ms per hash on typical hardware — negligible for a real login,
-but expensive enough to make offline brute-forcing a leaked database
-impractical at scale. (Tests use `BCRYPT_ROUNDS = 4` purely for speed; never
-use that value outside the test suite.)
+**Migration approach — dual verification, not a forced reset:** rather than
+invalidating every existing account, `verify_password()` inspects the
+stored hash's format to determine whether it's a legacy bcrypt hash or a
+new Argon2id hash, and verifies accordingly. This means existing users are
+never locked out by the migration; new hashes (new registrations, and any
+password change) are always written as Argon2id going forward.
 
 ---
 
@@ -174,6 +180,32 @@ should not hand out usable backup codes. Each code is single-use
 
 ---
 
+## 4a. Passwordless Authentication — WebAuthn (FIDO2)
+
+**Why add this alongside TOTP:** TOTP still requires typing a password
+first; WebAuthn removes the password step entirely for accounts that
+enroll a security key or platform authenticator (Windows Hello, Touch ID).
+This is framed as an extension of the MFA chapter rather than a
+replacement — users can still fall back to password + TOTP.
+
+**How registration/login work:** implemented via the `webauthn` library.
+Registration (`/api/auth/webauthn/register/begin` and `/complete`) and
+login (`/api/auth/webauthn/login/begin` and `/complete`) both use a
+short-lived, single-purpose JWT to bind the server-issued challenge to the
+requesting user, following the same pattern as the existing `pre_mfa`
+token.
+
+**Replay protection:** each authenticator tracks a `sign_count` that must
+strictly increase on every use; a login attempt with a non-increasing
+counter is rejected and logged the same way a bad password attempt is.
+
+**Manually verified:** tested end-to-end via Chromium's built-in virtual
+authenticator, confirming registration, login, and replay rejection all
+behave correctly. Not yet tested against physical hardware (a real
+security key or platform biometric sensor).
+
+---
+
 ## 5. JWT Session Management
 
 **Why JWT over server-side sessions:** JWTs are stateless and self-verifying
@@ -218,7 +250,7 @@ per minute, 3 registrations per minute, 100 general requests per hour by
 default (`config.py`).
 
 **Per-username limiting, in addition to per-IP:** the login endpoint also
-throttles by the *username in the request body* (5 attempts/minute),
+throttles by the *username in the request body* (10 attempts/minute),
 independent of the per-IP limit above. Per-IP limiting alone can be dodged
 by spreading attempts for one target account across many IP addresses
 (botnets, rotating proxies); tying a second limit to the account itself
@@ -261,6 +293,9 @@ call away from being proven.
 - The email-OTP alternative mentioned in early planning was intentionally
   narrowed to TOTP-only for this build, since TOTP doesn't depend on a
   working SMTP relay for the demo to function offline.
+- WebAuthn has been verified against Chromium's virtual authenticator but
+  not yet against real physical hardware (a USB security key or a
+  platform biometric sensor like Touch ID/Windows Hello).
 
 ---
 
@@ -276,97 +311,3 @@ worker independently imports the Flask app, and `create_app()` calls
 SQLite's whole-file locking effectively serializes concurrent writers, so
 the race was invisible. Against Postgres, both workers raced to create the
 same tables at nearly the same instant, and the loser crashed with:
-
-```
-psycopg2.errors.UniqueViolation: duplicate key value violates unique
-constraint "pg_class_relname_nsp_index"
-```
-
-Gunicorn's supervisor restarted the crashed worker automatically, so the
-app appeared to recover on its own — but this was fragile, timing-dependent
-luck rather than correct behavior, and would resurface unpredictably on any
-fresh deployment.
-
-**The fix:** table creation was moved out of the app-boot path shared by
-every worker and into a dedicated `entrypoint.sh` script that runs once, in
-a single process, before Gunicorn starts and forks any workers:
-
-```sh
-#!/bin/sh
-set -e
-python -c "from app import create_app; from app.extensions import db; app = create_app(); app.app_context().push(); db.create_all()"
-exec gunicorn --bind 0.0.0.0:5000 --workers 2 run:app
-```
-
-`db.create_all()` is naturally idempotent (it only creates tables that
-don't already exist), so this is safe to run on every container restart. By
-the time Gunicorn's workers boot and each one calls `create_app()` again
-individually, the tables already exist, so those calls become harmless
-no-ops instead of racing each other.
-
-**Why this matters beyond just fixing the crash:** this is a concrete,
-reproducible example of a bug class that only surfaces under a
-production-shaped database, reinforcing why "the config supports Postgres"
-is not the same claim as "Postgres works end-to-end" — the latter needs to
-actually be run and tested, not just assumed from SQLAlchemy's
-database-agnostic API.
-
-**Verified:** registration was tested directly against the running
-Postgres container (bypassing the API layer to rule out any other
-variable) and confirmed via `psql` that rows persist correctly with
-sequential IDs and no data loss across repeated registrations.
-
----
-
-## 10. Finding: Per-Username Rate Limiting Interacts With Account Lockout (Fixed)
-
-**What was tested:** a credential-stuffing simulation against a single
-test account, using a curated list of ~50 of the most common breached
-passwords, to measure how many attempts an attacker gets before the
-account is locked.
-
-**What was observed:** the account was not locked after the expected
-5 failed attempts (`MAX_FAILED_ATTEMPTS = 5`). Instead, it took 16
-attempts across several separate 1-minute windows before a lockout
-finally triggered.
-
-**Root cause:** the newly added per-username rate limiter
-(`RATELIMIT_LOGIN_PER_USERNAME`) is configured at exactly "5 per
-minute" — the same threshold as `MAX_FAILED_ATTEMPTS`. Because the rate
-limiter runs first (as a route decorator, before the request body is
-even processed), it blocks the 6th request with a `429` before the
-lockout logic ever sees a 5th recorded failure in the database. The
-account is never actually locked in that window; it's simply
-rate-limited into silence. Only across multiple separate 1-minute
-windows does the recorded failure count in the database eventually
-exceed 5, at which point the lockout logic (which has no time-window
-expiry — see §2) finally fires.
-
-**Why this matters:** the two defenses were intended to reinforce each
-other, but as configured they compete for the same budget of requests.
-An attacker distributing a credential-stuffing attempt across multiple
-minutes (rather than sending 50 requests instantly) effectively gets
-extra "free" guesses per minute that never count toward the lockout
-threshold in that window, meaningfully delaying when the account
-actually locks.
-
-**Recommended fix:** set `RATELIMIT_LOGIN_PER_USERNAME` higher than
-`MAX_FAILED_ATTEMPTS` (e.g. 8–10 per minute) so the lockout has room to
-fire on genuine password failures, while the rate limiter remains a
-backstop against very high-volume or distributed attempts rather than
-competing with the lockout for the same 5 requests.
-
-**Verified:** confirmed via an isolated, deliberately paced test (one
-request every 2 seconds, well under 1 per minute) — the rate limiter
-still returned `429` on the 6th request, proving the interaction is
-independent of request timing/burstiness and is a genuine threshold
-overlap, not a timing artifact.
-
-**Fix applied:** `RATELIMIT_LOGIN_PER_USERNAME` raised from "5 per
-minute" to "10 per minute" in `config.py`, keeping it above
-`MAX_FAILED_ATTEMPTS` so the rate limiter no longer intercepts the
-request that would register the 5th failure. Re-verified against a
-fresh test account: attempts 1–5 return `401 Invalid username or
-password`, and the very next attempt returns `423 Account temporarily
-locked` — lockout now fires at the intended 5th failure, in a single
-window, with no rate-limit interference.
