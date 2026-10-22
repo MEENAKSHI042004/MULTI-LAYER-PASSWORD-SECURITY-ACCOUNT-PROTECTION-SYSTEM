@@ -3,9 +3,25 @@
 A linear walkthrough for the review. Anyone on the team can read this and
 present it, even without knowing every module in depth.
 
-**Before you start:** run `python run.py`, open `http://127.0.0.1:5000`,
-and have a second incognito browser window ready for the "regular user"
-side while you stay logged in as admin in the main window.
+## Pre-flight checklist (do this 10 minutes before, not live)
+
+- [ ] **Use `localhost`, never `127.0.0.1`.** Open the dashboard at
+  `http://localhost:5000` and the storefront at `http://localhost:5001`. A
+  security key enrolled on `127.0.0.1` fails (WebAuthn's RP ID is `localhost`).
+- [ ] **Start both servers** (two terminals): `python run.py` (or
+  `docker compose up`) and, from `storefront/`, `python app.py`.
+- [ ] Set `SEED_ADMIN_PASSWORD` before the first start so you know the admin
+  password; log in as `admin` once to confirm.
+- [ ] **Real hardware ready:** Windows Hello / Touch ID set up in the OS (or a
+  USB key plugged in); use Chrome or Edge (Safari for Touch ID).
+- [ ] **Pre-create the demo user and pre-enrol their security key** (dashboard
+  -> MFA setup -> Add Security Key), so the live step only has to *sign in*.
+- [ ] Open **two separate browser windows side by side** -- dashboard in one,
+  storefront in the other -- not two tabs. The storefront deliberately pauses
+  its session check while its tab is hidden, so a background tab won't lock out
+  until you switch back to it.
+- [ ] Record a 60-90 second screen capture of steps 10a-10d working, as a
+  fallback if live networking or hardware misbehaves.
 
 ---
 
@@ -28,8 +44,8 @@ changing (Weak → Fair → Strong → Very Strong).
 **Say:** "Now let's see the brute-force protection. Repeated wrong
 passwords lock the account, and the lockout duration doubles each time —
 30 seconds, 60, 120, up to a 1-hour cap."
-**Do:** Fail login 5 times on purpose in the incognito window, show the
-"Account temporarily locked" message with the retry countdown.
+**Do:** Fail login 5 times on purpose in the incognito window; the 6th
+attempt returns "Account temporarily locked" with the retry countdown.
 **Fallback:** if it doesn't trigger live, run `python cli_demo.py
 simulate-lockout --username <name>` in a terminal instead — it shows the
 same escalating backoff cleanly from the command line.
@@ -75,19 +91,41 @@ verification or scripting."
 simulate-lockout`, narrating the escalating lockout output.
 
 ### 10. Show the demo storefront as a second client
-**Say:** "Everything so far has been MLPSAPS's own dashboard. To prove
-this actually works as a real authentication provider — not just for
-itself — we've built a separate demo storefront with no login logic of
-its own. It calls MLPSAPS's API directly for every account action."
-**Do:** Open the storefront site in a new tab, log in with the same
-account using the password form, then show the "Sign in with security
-key" option authenticating through the same MLPSAPS WebAuthn endpoints.
-Point out that revoking the session from the MLPSAPS admin dashboard
-immediately locks the storefront out too, since they share one backend.
-**Fallback:** if live login fails, show the storefront's `login.html` and
-the browser's network tab calling `/api/auth/login` and
-`/api/auth/webauthn/login/*` directly, to demonstrate the same API is
-being used.
+**Say:** "Everything so far has been MLPSAPS's own dashboard. To prove this
+works as a real authentication provider -- not just for itself -- we built a
+separate storefront with no login logic of its own. Every account action goes
+to MLPSAPS's API."
+
+**10a. Password login on the second site.**
+**Do:** In the storefront window, log in with the demo user's username and
+password. Show it land on the Account page, which is fetched live from
+`/api/auth/me`.
+**Say:** "Different site, different port, different origin -- and it only
+works because MLPSAPS explicitly allows that one origin; it is not open to the
+world."
+
+**10b. Passwordless login on the second site.**
+**Do:** Log out of the storefront. Type the username, click **Sign in with
+security key / Touch ID**, and touch the key / use the fingerprint.
+**Say:** "Same MLPSAPS backend, but no password at all -- the private key
+never leaves the device."
+**Fallback:** show the pre-recorded clip, or the browser network tab calling
+`/api/auth/webauthn/login/begin` and `/complete`.
+
+**10c. Revoke the session from MLPSAPS.**
+**Do:** In the dashboard window go to **Account -> Active sessions**. You will
+see two sessions: the dashboard's own (tagged "this session") and the
+storefront's. Click **Revoke** on the one that is *not* tagged.
+**Say:** "I'm signing the storefront out from MLPSAPS, a different site."
+
+**10d. Watch the storefront lock itself out.**
+**Do:** Keep the storefront window visible and don't touch it. Within about 15
+seconds it redirects to the login page on its own.
+**Say:** "No click, no reload -- the storefront re-checks the token with
+MLPSAPS every 15 seconds, so a revoked session is cut off almost immediately.
+One backend is the single source of truth."
+**If it doesn't happen:** the storefront window was probably in a background
+tab -- click on it. If it still doesn't, the pre-recorded clip is the fallback.
 
 ### 11. Close with the architecture diagram
 **Say:** "To tie it together, here's how a request actually flows through

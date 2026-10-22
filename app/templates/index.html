@@ -263,6 +263,12 @@
         <pre id="me-json" style="font-family:var(--mono);font-size:12px;color:var(--muted);margin:0;">—</pre>
       </div>
       <div class="card">
+        <h2>Active sessions <span class="tag">GET /api/auth/sessions</span></h2>
+        <div class="msg" id="sessions-msg"></div>
+        <div id="sessions-list" style="font-size:13px;color:var(--muted);margin-bottom:10px;">—</div>
+        <button class="btn secondary" data-action="loadSessions">Refresh sessions</button>
+      </div>
+      <div class="card">
         <h2>Change password <span class="tag">POST /api/auth/change-password</span></h2>
         <div class="msg" id="cp-msg"></div>
         <label>Current password</label>

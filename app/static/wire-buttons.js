@@ -4,7 +4,7 @@ document.addEventListener("click", function (event) {
   var name = button.getAttribute("data-action");
   var handler = window[name];
   if (typeof handler === "function") {
-    handler();
+    handler(button.dataset.userId ? Number(button.dataset.userId) : undefined);
   } else {
     console.error("wire-buttons.js: no function named " + name);
   }

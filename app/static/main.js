@@ -345,6 +345,47 @@ async function loadMe(){
   document.getElementById('account-email').value = data.user.email;
   state.user = data.user;
   updateSessionBox();
+  loadSessions();
+}
+
+// --- active sessions (list + revoke) ---
+async function loadSessions(){
+  hideMsg('sessions-msg');
+  const box = document.getElementById('sessions-list');
+  if (!state.accessToken) { box.textContent = 'Log in first.'; return; }
+  const { ok, data } = await api('/api/auth/sessions', { auth:'access' });
+  if (!ok) { showMsg('sessions-msg', data.error || 'Could not load sessions.', 'error'); return; }
+  box.textContent = '';
+  if (!data.sessions.length) { box.textContent = 'No active sessions.'; return; }
+  data.sessions.forEach(sess => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line, #2a2f3a);';
+    const info = document.createElement('span');
+    const agent = (sess.user_agent || 'unknown client').slice(0, 60);
+    info.textContent = '#' + sess.id + ' \u00b7 ' + (sess.ip_address || '?') + ' \u00b7 ' + agent +
+      ' \u00b7 last seen ' + new Date(sess.last_seen_at).toLocaleTimeString();
+    row.appendChild(info);
+    if (sess.is_current) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = 'this session';
+      row.appendChild(tag);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn secondary btn-xs';
+      btn.textContent = 'Revoke';
+      btn.addEventListener('click', () => revokeSession(sess.id));
+      row.appendChild(btn);
+    }
+    box.appendChild(row);
+  });
+}
+
+async function revokeSession(sessionId){
+  const { ok, data } = await api('/api/auth/sessions/' + sessionId + '/revoke', { method:'POST', auth:'access' });
+  if (!ok) { showMsg('sessions-msg', data.error || 'Could not revoke session.', 'error'); return; }
+  showMsg('sessions-msg', data.message || 'Session revoked.', 'ok');
+  loadSessions();
 }
 
 async function doChangePassword(){
@@ -404,7 +445,7 @@ async function loadDashboard(){
     '<tr><td>' + l.user_id + '</td><td>' + l.lockout_number + '</td><td>' + fmtTime(l.locked_at) +
     '</td><td>' + fmtTime(l.unlock_at) + '</td><td>' + l.duration_seconds + 's</td><td>' +
     (l.active ? '<span class="pill fail">active</span>' : '<span class="pill ok">expired</span>') + '</td><td>' +
-    (l.active ? '<button class="btn secondary btn-xs" onclick="doUnlock(' + l.user_id + ')">Unlock</button>' : '—') +
+    (l.active ? '<button class="btn secondary btn-xs" data-action="doUnlock" data-user-id="' + l.user_id + '">Unlock</button>' : '—') +
     '</td></tr>'
   ).join('');
 }
