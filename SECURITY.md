@@ -290,6 +290,9 @@ call away from being proven.
 
 ## 8. Known Limitations (be upfront about these in the viva)
 
+> A fuller, per-item list with the production path for each is in
+> [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+
 - SQLite is used for local development by default; `DATABASE_URL` can
   point at PostgreSQL for a production-shaped deployment. This was
   initially assumed to be a pure config change, but testing it end-to-end
