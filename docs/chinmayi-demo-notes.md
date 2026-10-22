@@ -28,7 +28,9 @@ Open the shop at http://localhost:5001 (use localhost, not 127.0.0.1).
 ## 5. Lockout and rate limiting
 - Register a throwaway user (limit: 3 registrations per minute).
 - Enter 5 wrong passwords; the next attempt returns "Account temporarily locked".
-- Per-username limit: more than 5 attempts a minute on one username gives a 429.
+- Per-username limit: more than 10 attempts a minute on one username gives a 429
+  (RATELIMIT_LOGIN_PER_USERNAME is 10 per minute). Lockout fires first, after 5 wrong
+  passwords, so the lockout message appears well before any 429.
 
 ## 6. Hashing benchmark
 - Show docs/bcrypt_vs_argon2id_benchmark.md (measured on this machine:
