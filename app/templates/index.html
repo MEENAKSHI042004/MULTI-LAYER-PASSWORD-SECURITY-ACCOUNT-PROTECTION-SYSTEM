@@ -198,7 +198,7 @@
           <div class="entropy-label" id="reg-entropy-label">Strength: Weak</div>
         </div>
         <div class="hint">10+ chars, upper + lower + digit + symbol, not a commonly breached password.</div>
-        <button class="btn" onclick="doRegister()">Create account</button>
+        <button class="btn" data-action="doRegister">Create account</button>
       </div>
     </section>
 
@@ -213,7 +213,7 @@
         <input type="text" id="login-username" autocomplete="username">
         <label>Password</label>
         <input type="password" id="login-password" autocomplete="current-password">
-        <button class="btn" onclick="doLogin()">Continue</button>
+        <button class="btn" data-action="doLogin">Continue</button>
       </div>
       <div class="card" id="mfa-challenge-card" style="display:none;">
         <h2>Verify identity <span class="tag">POST /api/auth/verify-mfa</span></h2>
@@ -223,7 +223,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:12px;">
           <input type="checkbox" id="mfa-use-recovery" style="width:auto;margin:0;"> This is a recovery code
         </label>
-        <button class="btn" onclick="doVerifyMfa()">Verify &amp; sign in</button>
+        <button class="btn" data-action="doVerifyMfa">Verify &amp; sign in</button>
       </div>
     </section>
 
@@ -234,20 +234,20 @@
       <div class="card">
         <h2>Enrol <span class="tag">POST /api/auth/mfa/setup</span></h2>
         <div class="msg" id="mfa-setup-msg"></div>
-        <button class="btn secondary" onclick="doMfaSetup()">Generate secret &amp; QR</button>
+        <button class="btn secondary" data-action="doMfaSetup">Generate secret &amp; QR</button>
         <div id="qr-area" style="margin-top:16px;"></div>
       </div>
       <div class="card" id="mfa-confirm-card" style="display:none;">
         <h2>Confirm <span class="tag">POST /api/auth/mfa/confirm</span></h2>
         <label>Enter the 6-digit code from your authenticator app</label>
         <input type="text" id="mfa-confirm-code">
-        <button class="btn" onclick="doMfaConfirm()">Enable MFA</button>
+        <button class="btn" data-action="doMfaConfirm">Enable MFA</button>
         <div id="recovery-area"></div>
       </div>
       <div class="card">
         <h2>Security Keys / Passwordless Login</h2>
         <div class="msg" id="webauthn-msg"></div>
-        <button class="btn secondary" onclick="doAddSecurityKey()">Add Security Key</button>
+        <button class="btn secondary" data-action="doAddSecurityKey">Add Security Key</button>
         <div class="security-key-list" id="webauthn-credentials"></div>
       </div>
     </section>
@@ -268,7 +268,7 @@
         <input type="password" id="cp-current">
         <label>New password</label>
         <input type="password" id="cp-new">
-        <button class="btn" onclick="doChangePassword()">Update password</button>
+        <button class="btn" data-action="doChangePassword">Update password</button>
       </div>
       <div class="card">
         <h2>Account details <span class="tag">POST /api/auth/update-account</span></h2>
@@ -277,7 +277,7 @@
         <input type="text" id="account-username" autocomplete="username">
         <label>Email</label>
         <input type="email" id="account-email" autocomplete="email">
-        <button class="btn" onclick="doUpdateAccount()">Update details</button>
+        <button class="btn" data-action="doUpdateAccount">Update details</button>
       </div>
     </section>
 
@@ -294,10 +294,10 @@
         <div class="stat"><div class="num" id="stat-locked">—</div><div class="label">Active lockouts</div></div>
       </div>
 
-      <button class="btn secondary" onclick="loadDashboard()">Refresh</button>
+      <button class="btn secondary" data-action="loadDashboard">Refresh</button>
 
       <div class="card" style="margin-top:18px;">
-        <h2>Audit log <span class="tag">GET /api/admin/audit-log</span> <button class="btn secondary" onclick="exportAuditLog()">Export CSV</button> <button class="btn secondary" onclick="exportAuditLogPdf()">Export PDF</button></h2>
+        <h2>Audit log <span class="tag">GET /api/admin/audit-log</span> <button class="btn secondary" data-action="exportAuditLog">Export CSV</button> <button class="btn secondary" data-action="exportAuditLogPdf">Export PDF</button></h2>
         <table id="audit-table"><thead><tr><th>Time</th><th>Event</th><th>User</th><th>IP</th><th>Details</th></tr></thead><tbody></tbody></table>
       </div>
 
@@ -314,7 +314,7 @@
       <div class="card">
         <h2>Brute-force simulation <span class="tag">POST /api/admin/simulate-lockout</span></h2>
         <div class="msg" id="simulation-msg"></div>
-        <button class="btn secondary" id="simulate-lockout-btn" onclick="runAttackSimulation()">Run Attack Simulation</button>
+        <button class="btn secondary" id="simulate-lockout-btn" data-action="runAttackSimulation">Run Attack Simulation</button>
         <div class="simulation-log" id="simulation-log" role="log" aria-live="polite">Simulation results will appear here.</div>
       </div>
     </section>
@@ -323,5 +323,6 @@
 </div>
 
 <script src="/static/main.js"></script>
+<script src="/static/wire-buttons.js"></script>
 </body>
 </html>
