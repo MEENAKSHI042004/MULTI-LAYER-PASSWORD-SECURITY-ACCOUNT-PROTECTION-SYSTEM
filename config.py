@@ -15,9 +15,11 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 class Config:
     # --- Core Flask ---
     SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "dev-only-change-me")
+    # Some hosts (older Heroku/Render setups) hand out "postgres://" URLs, which
+    # SQLAlchemy 1.4+ rejects -- it only recognises "postgresql://".
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'app.db')}"
-    )
+    ).replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # --- JWT session management ---
@@ -88,6 +90,15 @@ class Config:
     CORS_ALLOWED_ORIGINS = os.environ.get(
         "CORS_ALLOWED_ORIGINS", "http://127.0.0.1:5001,http://localhost:5001"
     ).split(",")
+
+    # --- Reverse proxy ---
+    # Number of trusted proxies in front of the app (Render, nginx, ...). 0 means
+    # "none": the app uses the socket's address and ignores X-Forwarded-* headers
+    # entirely. Set to 1 when deployed behind exactly one proxy so per-IP rate
+    # limiting and audit logs see the real client instead of the proxy. Never set
+    # this higher than the real number of proxies -- extra hops let a client spoof
+    # its own IP by sending a forged X-Forwarded-For header.
+    TRUST_PROXY_HOPS = int(os.environ.get("TRUST_PROXY_HOPS", 0))
 
 
 class TestConfig(Config):

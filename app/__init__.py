@@ -8,11 +8,20 @@ from config import Config
 from app.extensions import db, limiter
 from flask_talisman import Talisman
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 def create_app(config_object=Config):
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config.from_object(config_object)
+
+    # Behind a reverse proxy every request otherwise appears to come from the
+    # proxy's IP, which would make per-IP rate limiting throttle all users as
+    # one client. Only trust forwarded headers when told exactly how many
+    # proxies sit in front (TRUST_PROXY_HOPS); the default of 0 ignores them.
+    hops = app.config.get("TRUST_PROXY_HOPS", 0)
+    if hops > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
 
     # Ensure instance folder exists for SQLite file DB.
     instance_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "instance")

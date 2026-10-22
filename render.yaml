@@ -1,4 +1,11 @@
+databases:
+  - name: mlpsaps-db
+    databaseName: mlpsaps
+    user: mlpsaps
+    plan: free            # free Postgres expires after a limited period; use a paid plan for anything you need to keep
+
 services:
+  # ---------------------------------------------------------------- MLPSAPS
   - type: web
     name: mlpsaps
     runtime: docker
@@ -6,11 +13,40 @@ services:
     dockerContext: .
     healthCheckPath: /health
     envVars:
+      # Render generates these once and keeps them; nobody (including this
+      # repo) ever sees the values.
       - key: FLASK_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: JWT_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: mlpsaps-db
+          property: connectionString
+      # You choose this one (it's the seeded admin's password) -- Render will
+      # prompt for it on first deploy.
       - key: SEED_ADMIN_PASSWORD
+        sync: false
+      # Exactly one reverse proxy (Render's) sits in front of the app. Verify
+      # after the first deploy that audit-log IPs are real client IPs, not
+      # Render-internal addresses -- see DEPLOYMENT.md.
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      # ---- fill in once the storefront's URL is known (see DEPLOYMENT.md) ----
+      - key: CORS_ALLOWED_ORIGINS      # e.g. https://mlpsaps-storefront.onrender.com
+        sync: false
+      - key: WEBAUTHN_RP_ID            # e.g. mlpsaps.onrender.com  (host only, no scheme)
+        sync: false
+      - key: WEBAUTHN_ORIGIN           # e.g. https://mlpsaps.onrender.com
+        sync: false
+
+  # -------------------------------------------------------------- storefront
+  - type: web
+    name: mlpsaps-storefront
+    runtime: python
+    rootDir: storefront
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: MLPSAPS_API_BASE          # e.g. https://mlpsaps.onrender.com
         sync: false

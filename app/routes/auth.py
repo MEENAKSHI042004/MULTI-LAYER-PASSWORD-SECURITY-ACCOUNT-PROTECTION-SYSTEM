@@ -74,7 +74,11 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 def _client_ip():
-    return request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+    # request.remote_addr is already corrected by ProxyFix when (and only when)
+    # TRUST_PROXY_HOPS is configured. Reading X-Forwarded-For directly here
+    # would let any caller write an arbitrary IP into the audit log and the
+    # login-attempt records by sending a forged header.
+    return request.remote_addr or "unknown"
 
 
 def _username_from_request():
