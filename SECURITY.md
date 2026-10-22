@@ -304,9 +304,7 @@ call away from being proven.
 - The email-OTP alternative mentioned in early planning was intentionally
   narrowed to TOTP-only for this build, since TOTP doesn't depend on a
   working SMTP relay for the demo to function offline.
-- WebAuthn has been verified against Chromium's virtual authenticator but
-  not yet against real physical hardware (a USB security key or a
-  platform biometric sensor like Touch ID/Windows Hello).
+- WebAuthn has been tested end to end with a real Chrome passkey (synced through Google Password Manager) on a physical laptop, including signing in on the storefront with a key enrolled on the MLPSAPS dashboard. Windows Hello and a physical USB security key have not been tested.
 
 ---
 
