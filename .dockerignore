@@ -1,0 +1,11 @@
+# Keep the Docker build context small and keep secrets/local state out of the image.
+venv/
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+instance/
+.env
+zap-reports/
+node_modules/

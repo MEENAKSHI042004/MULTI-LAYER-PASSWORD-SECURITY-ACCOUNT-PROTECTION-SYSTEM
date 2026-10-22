@@ -12,7 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/instance
-RUN chmod +x /app/entrypoint.sh
+# Strip Windows CR characters (harmless if there are none) so the shebang line
+# works even when the repo was checked out with CRLF line endings.
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 EXPOSE 5000
 
