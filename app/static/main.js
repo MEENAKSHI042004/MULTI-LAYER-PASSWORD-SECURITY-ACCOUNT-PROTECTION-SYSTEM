@@ -111,6 +111,71 @@ async function doLogin(){
   showMsg('login-msg', 'Signed in as ' + data.user.username + '.', 'ok');
 }
 
+async function doSecurityKeyLogin(){
+  hideMsg('login-msg');
+  document.getElementById('mfa-challenge-card').style.display = 'none';
+  const username = document.getElementById('login-username').value.trim();
+  if (!username) {
+    showMsg('login-msg', 'Enter your username to sign in with a security key.', 'error');
+    return;
+  }
+  if (!navigator.credentials || !navigator.credentials.get) {
+    showMsg('login-msg', 'This browser does not support security keys.', 'error');
+    return;
+  }
+
+  try {
+    const begin = await api('/api/auth/webauthn/login/begin', {
+      method:'POST', body: JSON.stringify({username})
+    });
+    if (!begin.ok) {
+      showMsg('login-msg', begin.data.error || 'Could not start security key sign-in.', 'error');
+      return;
+    }
+    const options = begin.data.options;
+    options.challenge = base64urlToArrayBuffer(options.challenge);
+    (options.allowCredentials || []).forEach(credential => {
+      credential.id = base64urlToArrayBuffer(credential.id);
+    });
+
+    const credential = await navigator.credentials.get({ publicKey: options });
+    if (!credential) {
+      showMsg('login-msg', 'Security key sign-in was cancelled.', 'error');
+      return;
+    }
+    const complete = await api('/api/auth/webauthn/login/complete', {
+      method:'POST',
+      body: JSON.stringify({
+        challenge_token: begin.data.challenge_token,
+        credential: {
+          id: credential.id,
+          rawId: arrayBufferToBase64url(credential.rawId),
+          type: credential.type,
+          response: {
+            clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+            authenticatorData: arrayBufferToBase64url(credential.response.authenticatorData),
+            signature: arrayBufferToBase64url(credential.response.signature),
+            userHandle: credential.response.userHandle
+              ? arrayBufferToBase64url(credential.response.userHandle)
+              : null,
+          },
+        },
+      }),
+    });
+    if (!complete.ok) {
+      showMsg('login-msg', complete.data.error || 'Security key sign-in failed.', 'error');
+      return;
+    }
+    state.accessToken = complete.data.access_token;
+    state.refreshToken = complete.data.refresh_token;
+    state.user = complete.data.user;
+    updateSessionBox();
+    showMsg('login-msg', 'Signed in as ' + complete.data.user.username + '.', 'ok');
+  } catch (error) {
+    showMsg('login-msg', error.message || 'Security key sign-in failed.', 'error');
+  }
+}
+
 async function doVerifyMfa(){
   hideMsg('mfa-challenge-msg');
   const code = document.getElementById('mfa-code').value.trim();
