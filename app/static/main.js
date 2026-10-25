@@ -67,7 +67,9 @@ async function api(path, opts={}){
   opts.headers['Content-Type'] = 'application/json';
   if (opts.auth === 'access' && state.accessToken) opts.headers['Authorization'] = 'Bearer ' + state.accessToken;
   if (opts.auth === 'pre_mfa' && state.preMfaToken) opts.headers['Authorization'] = 'Bearer ' + state.preMfaToken;
-  const res = await fetch(path, opts);
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { return { ok:false, status:0, data:{ error:"Can't reach the MLPSAPS server. Is it running?" } }; }
   let data = {};
   try { data = await res.json(); } catch(e) {}
   return { ok: res.ok, status: res.status, data };

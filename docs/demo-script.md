@@ -5,7 +5,7 @@ present it, even without knowing every module in depth.
 
 ## Pre-flight checklist (do this 10 minutes before, not live)
 
-- [ ] **Use `localhost`, never `127.0.0.1`.** Open the dashboard at
+- [ ] **Use `localhost`.** (Both apps redirect `127.0.0.1` to it automatically, but type it anyway.) Open the dashboard at
   `http://localhost:5000` and the storefront at `http://localhost:5001`. A
   security key enrolled on `127.0.0.1` fails (WebAuthn's RP ID is `localhost`).
 - [ ] **Start both servers** (two terminals): `python run.py` (or

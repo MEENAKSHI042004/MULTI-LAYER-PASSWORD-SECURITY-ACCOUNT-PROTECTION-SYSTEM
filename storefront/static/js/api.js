@@ -45,11 +45,17 @@ const MLPSAPS = {
     if (auth && this.getToken()) {
       headers["Authorization"] = `Bearer ${this.getToken()}`;
     }
-    const res = await fetch(`${this.base}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch(`${this.base}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      // Network failure / MLPSAPS not running / blocked by CORS.
+      return { ok: false, status: 0, data: null, networkError: true };
+    }
     let data = null;
     try {
       data = await res.json();
@@ -57,6 +63,28 @@ const MLPSAPS = {
       /* no JSON body */
     }
     return { ok: res.ok, status: res.status, data };
+  },
+
+  /** A message a person can act on, for any failed call() result. */
+  errorMessage(result, fallback) {
+    if (result.networkError) {
+      return `Can't reach MLPSAPS at ${this.base}. Is it running?`;
+    }
+    if (result.status === 429) {
+      return (result.data && result.data.error) || "Too many attempts. Please wait a minute and try again.";
+    }
+    if (result.status >= 500) {
+      return "MLPSAPS had a server error. Please try again; if it keeps happening, check the MLPSAPS window.";
+    }
+    const d = result.data || {};
+    const detail = Array.isArray(d.details) && d.details.length ? " " + d.details.join(" ") : "";
+    return (d.error || fallback) + detail;
+  },
+
+  /** True only when MLPSAPS itself says the token is no good (not on network
+   *  blips, rate limits or server errors, which must not log anyone out). */
+  tokenRejected(result) {
+    return !result.ok && (result.status === 401 || result.status === 403 || result.status === 422);
   },
 
   async register(username, email, password) {

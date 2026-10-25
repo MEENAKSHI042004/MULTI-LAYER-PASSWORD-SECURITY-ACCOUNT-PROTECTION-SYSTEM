@@ -7,7 +7,8 @@ docker compose up --build          # MLPSAPS + Postgres on :5000
 cd storefront && pip install -r requirements.txt && python app.py   # :5001
 ```
 
-Open **http://localhost:5001** (not 127.0.0.1 -- WebAuthn's RP ID is `localhost`).
+Open **http://localhost:5001**. WebAuthn's RP ID is `localhost`, so a key won't work on 127.0.0.1 --
+both apps redirect 127.0.0.1 to localhost automatically.
 Set `FLASK_SECRET_KEY`, `JWT_SECRET_KEY` and `SEED_ADMIN_PASSWORD` in a `.env`
 first (see `.env.example`); the compose defaults are placeholders.
 

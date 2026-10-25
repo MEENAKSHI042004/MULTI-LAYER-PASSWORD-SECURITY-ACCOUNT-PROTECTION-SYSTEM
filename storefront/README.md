@@ -18,7 +18,7 @@ its own** -- Register, Login, Account and Checkout all call MLPSAPS's real
    ```
    The storefront runs on **port 5001**.
 
-By default the storefront points at `http://127.0.0.1:5000`. Override with
+By default the storefront points at `http://localhost:5000`. Override with
 the `MLPSAPS_API_BASE` env var if MLPSAPS runs elsewhere.
 
 ## How the auth flow works
@@ -47,8 +47,9 @@ the internet read a logged-in user's session data.
 ## Passwordless login (WebAuthn) -- run it on `localhost`, not `127.0.0.1`
 
 WebAuthn credentials are bound to an RP ID (`localhost`) and the page origin.
-Open the storefront as **http://localhost:5001** -- on `127.0.0.1` the browser
-refuses the security-key prompt because the RP ID doesn't match. MLPSAPS
+Open the storefront as **http://localhost:5001**. On `127.0.0.1` the browser
+refuses the security-key prompt because the RP ID doesn't match, so both apps
+now redirect `127.0.0.1` to `localhost` automatically. MLPSAPS
 accepts assertions from both `http://localhost:5000` (dashboard) and
 `http://localhost:5001` (storefront) via `WEBAUTHN_ORIGIN` in `config.py`
 (comma-separated env var to override). A key enrolled on the MLPSAPS

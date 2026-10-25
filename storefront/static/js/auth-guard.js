@@ -20,10 +20,16 @@ async function requireAuth() {
   }
 
   const result = await MLPSAPS.me();
-  if (!result.ok) {
+  if (MLPSAPS.tokenRejected(result)) {
     // Token missing/expired/revoked -- MLPSAPS said no, so we don't trust it.
     MLPSAPS.clearSession();
     goToLogin();
+    return null;
+  }
+  if (!result.ok) {
+    // MLPSAPS unreachable / erroring: keep the session, say what's wrong.
+    const loading = document.querySelector('[id$="-loading"]');
+    if (loading) loading.textContent = MLPSAPS.errorMessage(result, "Could not verify your session.");
     return null;
   }
 
@@ -47,7 +53,9 @@ function startSessionWatch() {
     if (document.hidden) return;
 
     const result = await MLPSAPS.me();
-    if (!result.ok) {
+    // Only a real rejection counts as "revoked". A network blip or a 5xx just
+    // means "try again next round" -- it must not sign the user out.
+    if (MLPSAPS.tokenRejected(result)) {
       stopSessionWatch();
       MLPSAPS.clearSession();
       goToLogin();

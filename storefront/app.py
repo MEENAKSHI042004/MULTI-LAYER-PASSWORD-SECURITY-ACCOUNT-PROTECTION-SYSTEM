@@ -8,13 +8,22 @@ serves the pages; the auth flow lives in static/js/auth.js.
 """
 
 import os
-from flask import Flask, render_template
+from flask import Flask, redirect, render_template, request
 
 # The storefront only needs to know where MLPSAPS lives so it can hand that
 # URL to the browser-side JS. It never talks to MLPSAPS itself server-side.
-MLPSAPS_API_BASE = os.environ.get("MLPSAPS_API_BASE", "http://127.0.0.1:5000")
+MLPSAPS_API_BASE = os.environ.get("MLPSAPS_API_BASE", "http://localhost:5000")
 
 app = Flask(__name__)
+
+
+@app.before_request
+def prefer_localhost():
+    # Security keys only work on the name "localhost" (not 127.0.0.1), so send
+    # anyone who opens the storefront by IP to the working address.
+    if request.method == "GET" and request.host.split(":")[0] == "127.0.0.1":
+        host = request.host.replace("127.0.0.1", "localhost", 1)
+        return redirect(f"{request.scheme}://{host}{request.full_path.rstrip('?')}", code=302)
 
 PRODUCTS = [
     {

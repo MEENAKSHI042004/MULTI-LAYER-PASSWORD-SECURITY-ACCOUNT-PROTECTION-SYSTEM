@@ -2,7 +2,7 @@
 
 import os
 
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 
 from config import Config
 from app.extensions import db, limiter
@@ -59,6 +59,43 @@ def create_app(config_object=Config):
 
     from app.routes.auth import auth_bp
     from app.routes.admin import admin_bp
+    @app.before_request
+    def _prefer_localhost():
+        # Passkeys/security keys are bound to the name "localhost" and browsers
+        # refuse them on a numeric address ("This is an invalid domain"). Send
+        # anyone who opens the pages via 127.0.0.1 to the working address. The
+        # API and health check are left alone so scripts and containers that
+        # call 127.0.0.1 keep working.
+        if (
+            request.method == "GET"
+            and request.host.split(":")[0] == "127.0.0.1"
+            and not request.path.startswith("/api/")
+            and request.path != "/health"
+        ):
+            host = request.host.replace("127.0.0.1", "localhost", 1)
+            return redirect(f"{request.scheme}://{host}{request.full_path.rstrip('?')}", code=302)
+
+    # API callers (the dashboard and the storefront) parse JSON, so rate-limit and
+    # crash responses must be JSON too -- the default HTML pages left them showing
+    # a vague "failed" with no clue why.
+    @app.errorhandler(429)
+    def _too_many_requests(err):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                error="Too many attempts. Please wait a minute and try again.",
+                limit=str(err.description),
+            ), 429
+        return err
+
+    @app.errorhandler(500)
+    def _server_error(err):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                error="The server hit an unexpected error. Please try again; "
+                "if it keeps happening, check the MLPSAPS server log."
+            ), 500
+        return err
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
 

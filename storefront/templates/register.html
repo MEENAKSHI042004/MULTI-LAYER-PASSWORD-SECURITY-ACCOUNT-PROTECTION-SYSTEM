@@ -32,7 +32,10 @@
   const submitBtn = document.getElementById("register-submit");
 
   function showNotice(kind, message) {
-    notice.innerHTML = `<div class="notice notice-${kind}">${message}</div>`;
+    const box = document.createElement("div");
+    box.className = `notice notice-${kind}`;
+    box.textContent = message;
+    notice.replaceChildren(box);
   }
 
   form.addEventListener("submit", async (e) => {
@@ -57,11 +60,7 @@
       form.reset();
       setTimeout(() => (window.location.href = "/login"), 900);
     } else {
-      const detail = result.data && result.data.details
-        ? " " + result.data.details.join(" ")
-        : "";
-      const message = (result.data && result.data.error) || "Registration failed.";
-      showNotice("error", message + detail);
+      showNotice("error", MLPSAPS.errorMessage(result, "Registration failed."));
     }
   });
 </script>

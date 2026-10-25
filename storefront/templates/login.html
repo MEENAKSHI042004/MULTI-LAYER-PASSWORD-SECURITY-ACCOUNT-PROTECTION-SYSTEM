@@ -30,7 +30,10 @@
   const submitBtn = document.getElementById("login-submit");
 
   function showNotice(kind, message) {
-    notice.innerHTML = `<div class="notice notice-${kind}">${message}</div>`;
+    const box = document.createElement("div");
+    box.className = `notice notice-${kind}`;
+    box.textContent = message;
+    notice.replaceChildren(box);
   }
 
   function nextUrl() {
@@ -92,7 +95,7 @@
       return;
     }
 
-    showNotice("error", (result.data && result.data.error) || "Login failed.");
+    showNotice("error", MLPSAPS.errorMessage(result, "Login failed."));
   });
 
   const securityKeyButton = document.getElementById("security-key-login");
@@ -125,7 +128,7 @@
         auth: false,
       });
       if (!begin.ok || !begin.data) {
-        showNotice("error", (begin.data && begin.data.error) || "Could not start security key sign in.");
+        showNotice("error", MLPSAPS.errorMessage(begin, "Could not start security key sign in."));
         return;
       }
 
@@ -161,7 +164,7 @@
         finishLogin(response.data);
         return;
       }
-      showNotice("error", (response.data && response.data.error) || "Security key sign in failed.");
+      showNotice("error", MLPSAPS.errorMessage(response, "Security key sign in failed."));
     } catch (error) {
       showNotice("error", error.message || "Security key sign in failed.");
     } finally {
