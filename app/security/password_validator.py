@@ -112,6 +112,13 @@ def validate_password_strength(password: str) -> list:
         # HIBP unreachable — fall back to the local shortlist so obviously
         # weak passwords are still caught rather than silently allowed.
         errors.append("This password appears in common breach lists; choose a different one.")
+    elif breach_count == -1 and cfg.get("BREACH_CHECK_FAIL_CLOSED"):
+        # Fail-closed mode: the breach check could not run, so refuse rather
+        # than accept a password that was never checked.
+        errors.append(
+            "We could not verify this password against breach lists right now; "
+            "please try again shortly."
+        )
 
     return errors
 

@@ -60,6 +60,12 @@ class Config:
     PASSWORD_EXPIRY_DAYS = 90
     PASSWORD_HISTORY_SIZE = 5  # block re-use of last N passwords
 
+    # If the breach-check service (Have I Been Pwned) cannot be reached, the
+    # default is to fall back to the local list and still enforce length and
+    # complexity (availability over strictness). Set to "true" to refuse
+    # passwords instead when the breach check cannot run (fail-closed).
+    BREACH_CHECK_FAIL_CLOSED = os.environ.get("BREACH_CHECK_FAIL_CLOSED", "false").lower() == "true"
+
     # --- Brute-force / adaptive lockout ---
     MAX_FAILED_ATTEMPTS = 5          # failures before first lockout
     BASE_LOCKOUT_SECONDS = 30        # first lockout duration
