@@ -14,6 +14,7 @@ For design rationale see `SECURITY.md`; for run/deploy steps see `DEPLOYMENT.md`
 |---|---|---|
 | No password reset or email verification | There is no self-service reset. Email-OTP was deliberately dropped so the demo works offline (`SECURITY.md` §8). MFA users have single-use recovery codes. | Signed, single-use, short-lived reset/verification tokens delivered through an SMTP provider; rate-limit the endpoints; don't reveal whether an address exists. |
 | Seeded admin has a fallback password | If `SEED_ADMIN_PASSWORD` is unset, the admin is created with a hard-coded default. | Refuse to start outside test/dev when it is unset; force a password change on first login. |
+| Breach check is skipped when the service is unreachable | Passwords are checked against Have I Been Pwned using the k-anonymity range API. If that service cannot be reached, registration still enforces the length and complexity rules and a short local list, but it cannot check for breached passwords. Setting `BREACH_CHECK_FAIL_CLOSED=true` makes registration refuse passwords instead when the check cannot run. | Run fail-closed by default in production, and keep a larger local breach list or a self-hosted copy of the range data as a backup. |
 
 ## Secrets and cryptography
 
