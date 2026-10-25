@@ -4,21 +4,21 @@ Authentication REST endpoints.
   POST /api/auth/register        - create account (password policy enforced)
   POST /api/auth/login           - stage 1: password check (brute-force guarded)
   POST /api/auth/verify-mfa      - stage 2: TOTP or recovery code check
-  POST /api/auth/mfa/setup       - begin MFA enrolment (returns QR provisioning URI)
+  POST /api/auth/mfa/setup       - begin MFA enrolment (returns QR code + secret)
   POST /api/auth/mfa/confirm     - confirm enrolment with a valid TOTP code
   POST /api/auth/refresh         - exchange refresh token for new access token
   POST /api/auth/logout          - revokes the current access token (jti) and its session
   POST /api/auth/change-password - authenticated password change
-    POST /api/auth/update-account  - authenticated account details update
+  POST /api/auth/update-account  - authenticated account details update
   GET  /api/auth/me              - current session info
   GET  /api/auth/sessions        - list this user's active sessions
   POST /api/auth/sessions/<id>/revoke - end a specific session
-    POST /api/auth/webauthn/register/begin - begin security key registration
-    POST /api/auth/webauthn/register/complete - verify security key registration
-    GET  /api/auth/webauthn/credentials - list registered security keys
-    DELETE /api/auth/webauthn/credentials/<id> - remove a registered security key
-    POST /api/auth/webauthn/login/begin - begin security key login
-    POST /api/auth/webauthn/login/complete - verify security key login
+  POST /api/auth/webauthn/register/begin - begin security key registration
+  POST /api/auth/webauthn/register/complete - verify security key registration
+  GET  /api/auth/webauthn/credentials - list registered security keys
+  DELETE /api/auth/webauthn/credentials/<id> - remove a registered security key
+  POST /api/auth/webauthn/login/begin - begin security key login
+  POST /api/auth/webauthn/login/complete - verify security key login
 """
 
 import base64
@@ -68,6 +68,7 @@ from app.security.jwt_utils import (
     create_webauthn_login_challenge_token,
 )
 from app.security.audit_logger import log_event
+from app.security.qr_utils import provisioning_qr_svg
 from app.security.decorators import token_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -246,7 +247,11 @@ def mfa_setup():
     user.totp_secret = secret  # not yet enabled until /mfa/confirm
     db.session.commit()
     uri = get_provisioning_uri(secret, user.username)
-    return jsonify({"secret": secret, "provisioning_uri": uri}), 200
+    return jsonify({
+        "secret": secret,
+        "provisioning_uri": uri,
+        "qr_svg": provisioning_qr_svg(uri),
+    }), 200
 
 
 @auth_bp.route("/mfa/confirm", methods=["POST"])
