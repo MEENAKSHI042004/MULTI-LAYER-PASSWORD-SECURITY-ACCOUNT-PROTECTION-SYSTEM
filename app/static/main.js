@@ -194,9 +194,8 @@ async function doMfaSetup(){
   if (!state.accessToken) { showMsg('mfa-setup-msg', 'Log in first.', 'error'); return; }
   const { ok, data } = await api('/api/auth/mfa/setup', { method:'POST', auth:'access' });
   if (!ok) { showMsg('mfa-setup-msg', data.error || 'Could not start MFA setup.', 'error'); return; }
-  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(data.provisioning_uri);
   document.getElementById('qr-area').innerHTML =
-    '<div class="qr-box"><img src="' + qrUrl + '" width="160" height="160" alt="QR code"/>' +
+    '<div class="qr-box"><div>' + data.qr_svg + '</div>' +
     '<div><div class="hint">Scan with Google Authenticator / Authy, or enter manually:</div>' +
     '<div class="secret">' + data.secret + '</div></div></div>';
   document.getElementById('mfa-confirm-card').style.display = 'block';
@@ -363,7 +362,7 @@ async function loadSessions(){
     const info = document.createElement('span');
     const agent = (sess.user_agent || 'unknown client').slice(0, 60);
     info.textContent = '#' + sess.id + ' \u00b7 ' + (sess.ip_address || '?') + ' \u00b7 ' + agent +
-      ' \u00b7 last seen ' + new Date(sess.last_seen_at).toLocaleTimeString();
+      ' \u00b7 last seen ' + fmtTime(sess.last_seen_at);
     row.appendChild(info);
     if (sess.is_current) {
       const tag = document.createElement('span');
@@ -537,7 +536,19 @@ async function exportAuditLogPdf(){
 }
 
 function fmtTime(iso){
-  try { return new Date(iso).toLocaleString(); } catch(e) { return iso; }
+  try {
+    if (!iso) return '—';
+    // The API sends UTC timestamps without a timezone marker; add 'Z' so they
+    // are read as UTC, then display them in Indian Standard Time (UTC+5:30).
+    const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+    const date = new Date(hasZone ? iso : iso + 'Z');
+    return date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    }) + ' IST';
+  } catch(e) { return iso; }
 }
 
 updateSessionBox();
