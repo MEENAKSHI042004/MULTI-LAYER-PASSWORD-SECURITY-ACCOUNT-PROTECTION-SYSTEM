@@ -46,8 +46,11 @@ For design rationale see `SECURITY.md`; for run/deploy steps see `DEPLOYMENT.md`
 ## Passwordless (WebAuthn)
 
 - Verified with Chromium's virtual authenticator, including the cross-site case
-  (enrol on the dashboard, sign in from the storefront). **Real hardware
-  (security key, Touch ID, Windows Hello) has not been tested yet.**
+  (enrol on the dashboard, sign in from the storefront). Also tested end to
+  end with a real Chrome passkey (synced through Google Password Manager) on a
+  physical laptop, including signing in on the storefront with a key enrolled
+  on the dashboard. **Windows Hello and a physical USB security key have not
+  been tested.**
 - An RP ID must be the page's host or a registrable parent of it. Passwordless
   across two sites therefore needs them on subdomains of one domain you control
   (e.g. `auth.example.com` and `shop.example.com`); two default

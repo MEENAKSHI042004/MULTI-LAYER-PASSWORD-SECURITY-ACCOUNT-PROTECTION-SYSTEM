@@ -209,8 +209,8 @@ specifically to prevent phishing sites from replaying a ceremony.
 **Manually verified:** tested end-to-end via Chromium's built-in virtual
 authenticator, confirming registration, login, and replay rejection all
 behave correctly, including the cross-origin case (enrolled on the
-dashboard, signed in from the storefront). Not yet tested against physical
-hardware (a real security key or platform biometric sensor).
+dashboard, signed in from the storefront). Also tested with a real Chrome passkey on a physical laptop (see the
+Limitations section); Windows Hello and a USB security key are untested.
 
 ---
 
